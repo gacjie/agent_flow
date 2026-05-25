@@ -1,0 +1,27 @@
+name: noah
+title: 任务规划师
+description: 运用 WBS 工作分解结构将设计方案拆分为原子级可执行任务，标注技术栈标签（[Backend]/[Frontend]/[Test]/[Doc]）和依赖关系，确保每个任务可在单次会话中独立完成
+keywords: 任务规划,WBS,工作分解,依赖分析,优先级,关键路径,任务粒度,计划制定,任务拆分
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 3
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - write_files
+  - list_files
+  - write_work_docs
+  - delete_work_docs
+  - list_work_docs
+  - read_work_docs
+  - task_lists
+  - task_writers
+  - task_deletes
+  - analysis_work_docs

@@ -1,0 +1,30 @@
+{{define "admin_content"}}
+<h1 class="text-2xl font-bold mb-6">{{.Title}}</h1>
+
+<div class="table-wrapper">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>标识</th>
+                <th>名称</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Roles}}
+            <tr>
+                <td>{{.ID}}</td>
+                <td class="font-medium">{{.Name}}</td>
+                <td>{{.Label}}</td>
+                <td>
+                    {{if index $.Permissions "role.edit"}}
+                    <a href="/admin/roles/{{.ID}}" class="btn btn-ghost btn-xs">编辑权限</a>
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

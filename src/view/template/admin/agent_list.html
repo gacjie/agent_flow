@@ -1,0 +1,88 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">{{.Title}}</h1>
+    {{if index .Permissions "agent.create"}}
+    <a href="/admin/agents/new" class="btn btn-primary btn-sm">创建 AI 角色</a>
+    {{end}}
+</div>
+
+<div class="table-wrapper">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>标识</th>
+                <th>职位</th>
+                <th>模型</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Agents}}
+            <tr id="agent-row-{{.ID}}">
+                <td>{{.ID}}</td>
+                <td class="font-medium">{{.Title}}</td>
+                <td>{{.Name}}</td>
+                <td class="text-sm text-muted">{{truncate .Description 30}}</td>
+                <td>
+                    {{if and .ModelID (ne .ModelID "auto") (ne .ModelID "default")}}
+                        <span class="badge badge-primary">{{.Model.Name}}</span>
+                    {{else if eq .ModelID "default"}}
+                        <span class="badge badge-ghost">默认</span>
+                    {{else}}
+                        <span class="badge badge-ghost">自动</span>
+                    {{end}}
+                </td>
+                <td>
+                    {{if eq .Status 1}}
+                        <span class="badge badge-success">启用</span>
+                    {{else}}
+                        <span class="badge badge-error">禁用</span>
+                    {{end}}
+                </td>
+                <td>
+                    <div class="flex gap-1">
+                        {{if index $.Permissions "agent.edit"}}
+                        <a href="/admin/agents/{{.ID}}/edit" class="btn btn-ghost btn-xs">编辑</a>
+                        {{end}}
+                        {{if index $.Permissions "agent.delete"}}
+                        <button class="btn btn-error btn-xs"
+                            data-delete-url="/admin/agents/{{.ID}}"
+                            data-target="agent-row-{{.ID}}"
+                            data-confirm="确定要删除 AI 角色 {{.Title}} 吗？">
+                            删除
+                        </button>
+                        {{end}}
+                    </div>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="7" class="text-center opacity-50" style="padding:2rem;">暂无 AI 角色数据</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if and .Paging (gt .Paging.TotalPage 1)}}
+<div class="pagination">
+    {{if gt .Paging.Page 1}}
+        <a href="?page={{sub .Paging.Page 1}}" class="page-btn">上一页</a>
+    {{end}}
+    {{$currentPage := .Paging.Page}}
+    {{range seq 1 .Paging.TotalPage}}
+        {{if eq . $currentPage}}
+            <span class="page-btn page-btn-active">{{.}}</span>
+        {{else}}
+            <a href="?page={{.}}" class="page-btn">{{.}}</a>
+        {{end}}
+    {{end}}
+    {{if lt .Paging.Page .Paging.TotalPage}}
+        <a href="?page={{add .Paging.Page 1}}" class="page-btn">下一页</a>
+    {{end}}
+</div>
+{{end}}
+{{end}}

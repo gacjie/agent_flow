@@ -1,0 +1,39 @@
+{{define "admin_content"}}
+<h1 class="text-2xl font-bold mb-6">{{.Title}}</h1>
+
+<form action="/admin/roles/{{.FormRole.ID}}" method="POST">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+    <div class="table-wrapper">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width:3rem;">选择</th>
+                    <th>权限代码</th>
+                    <th>名称</th>
+                    <th>分组</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .AllPerms}}
+                <tr>
+                    <td>
+                        <input type="checkbox" name="permissions" value="{{.Code}}"
+                               {{if index $.RolePerms .Code}}checked{{end}}
+                               style="width:1.1rem;height:1.1rem;accent-color:var(--color-primary);">
+                    </td>
+                    <td class="font-medium">{{.Code}}</td>
+                    <td>{{.Label}}</td>
+                    <td><span class="badge badge-ghost">{{.Group}}</span></td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="flex gap-3 pt-4 mt-4">
+        <button type="submit" class="btn btn-primary">保存权限</button>
+        <a href="/admin/roles" class="btn btn-ghost">返回</a>
+    </div>
+</form>
+{{end}}

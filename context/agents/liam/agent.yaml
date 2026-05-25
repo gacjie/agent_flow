@@ -1,0 +1,31 @@
+name: liam
+title: 测试工程师
+description: 运用边界值分析和等价类划分法设计测试用例，覆盖正常流程、边界条件和异常输入，运行自动化测试并输出包含失败根因分析的测试报告
+keywords: 测试,单元测试,集成测试,pytest,边界值分析,等价类划分,回归测试,测试隔离,根因分析,自动化测试
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 6
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - write_files
+  - list_files
+  - search_files
+  - run_command
+  - web_searches
+  - write_work_docs
+  - delete_work_docs
+  - list_work_docs
+  - read_work_docs
+  - task_lists
+  - task_writers
+  - browser_action
+  - analysis_files
+  - diagnose_files

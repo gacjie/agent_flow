@@ -1,0 +1,207 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold">编排监控</h1>
+        <p class="text-muted text-sm mt-1">团队工作流编排引擎，支持顺序/并行/自适应策略</p>
+    </div>
+</div>
+
+<!-- 启动编排 -->
+<div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-body" style="align-items:stretch;text-align:left;">
+        <h3 style="font-weight:600;margin-bottom:1rem;font-size:1.1rem;">启动新编排</h3>
+        <div class="orch-form-grid">
+            <div class="form-control">
+                <label class="form-label">工作区</label>
+                <select id="sel-workspace" class="select">
+                    <option value="">请选择工作区</option>
+                    {{range .Workspaces}}
+                    <option value="{{.ID}}">{{.Label}} ({{.Name}})</option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="form-control">
+                <label class="form-label">团队</label>
+                <select id="sel-team" class="select">
+                    <option value="">请选择团队</option>
+                    {{range .Teams}}
+                    <option value="{{.ID}}">{{.Label}} ({{.Name}}){{if .TechStack}} [{{.TechStack}}]{{end}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+        <div class="form-control">
+            <label class="form-label">需求描述</label>
+            <textarea id="txt-requirement" class="input" rows="4" placeholder="请详细描述需要团队完成的开发任务..." style="resize:vertical;"></textarea>
+        </div>
+        <div>
+            <button id="btn-start" class="btn btn-primary">启动编排</button>
+        </div>
+    </div>
+</div>
+
+<!-- 运行状态 -->
+<div id="status-panel" style="display:none;">
+    <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-body" style="align-items:stretch;text-align:left;">
+            <div class="flex items-center justify-between" style="margin-bottom:1rem;">
+                <h3 style="font-weight:600;font-size:1.1rem;">运行状态</h3>
+                <div class="flex items-center gap-2">
+                    <span id="status-badge" class="badge"></span>
+                    <button id="btn-stop" class="btn btn-error btn-sm">停止</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-4 orch-stats-grid">
+                <div class="stat">
+                    <div class="stat-title">技术栈</div>
+                    <div id="info-strategy" class="stat-value" style="font-size:1rem;">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-title">当前阶段</div>
+                    <div id="info-phase" class="stat-value" style="font-size:1rem;">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-title">当前步骤</div>
+                    <div id="info-step" class="stat-value" style="font-size:1rem;">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-title">迭代次数</div>
+                    <div id="info-iterations" class="stat-value" style="font-size:1rem;">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编排日志 -->
+    <div class="card">
+        <div class="card-body" style="align-items:stretch;text-align:left;">
+            <h3 style="font-weight:600;margin-bottom:1rem;font-size:1.1rem;">执行日志</h3>
+            <div id="log-container" style="max-height:400px;overflow-y:auto;font-family:monospace;font-size:0.85rem;line-height:1.8;padding:0.75rem;background:var(--bg-base);border:1px solid var(--border);border-radius:0.5rem;">
+                <div style="color:var(--text-muted);">等待日志...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.orch-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.orch-stats-grid {}
+@media (max-width: 768px) {
+    .orch-form-grid { grid-template-columns: 1fr; }
+    .orch-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+</style>
+
+<script nonce="{{.Nonce}}">
+(function(){
+    const csrfToken = '{{.CSRFToken}}';
+    const btnStart = document.getElementById('btn-start');
+    const btnStop = document.getElementById('btn-stop');
+    const statusPanel = document.getElementById('status-panel');
+    let pollTimer = null;
+    let currentWSID = 0;
+
+    btnStart.addEventListener('click', async function(){
+        const wsID = document.getElementById('sel-workspace').value;
+        const teamID = document.getElementById('sel-team').value;
+        const req = document.getElementById('txt-requirement').value.trim();
+
+        if(!wsID || !teamID || !req) {
+            alert('请填写完整信息');
+            return;
+        }
+
+        btnStart.disabled = true;
+        btnStart.textContent = '启动中...';
+
+        try {
+            const resp = await fetch('/admin/orchestration/start', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json', 'X-CSRF-Token': csrfToken},
+                body: JSON.stringify({workspace_id: parseInt(wsID), team_id: parseInt(teamID), requirement: req})
+            });
+            const data = await resp.json();
+            if(data.code !== 0) {
+                alert(data.message || '启动失败');
+                btnStart.disabled = false;
+                btnStart.textContent = '启动编排';
+                return;
+            }
+            currentWSID = parseInt(wsID);
+            statusPanel.style.display = 'block';
+            btnStop.style.display = '';
+            startPolling();
+        } catch(e) {
+            alert('请求失败: ' + e.message);
+        } finally {
+            btnStart.disabled = false;
+            btnStart.textContent = '启动编排';
+        }
+    });
+
+    btnStop.addEventListener('click', async function(){
+        if(!currentWSID) return;
+        if(!confirm('确定要停止当前编排吗？')) return;
+        try {
+            await fetch('/admin/orchestration/stop?workspace_id=' + currentWSID, {
+                method: 'POST',
+                headers: {'X-CSRF-Token': csrfToken}
+            });
+        } catch(e) {
+            console.error(e);
+        }
+    });
+
+    function startPolling() {
+        if(pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(fetchStatus, 3000);
+        fetchStatus();
+    }
+
+    async function fetchStatus() {
+        if(!currentWSID) return;
+        try {
+            const resp = await fetch('/admin/orchestration/status?workspace_id=' + currentWSID);
+            const data = await resp.json();
+            if(data.code !== 0) return;
+
+            const state = data.data;
+            document.getElementById('info-strategy').textContent = state.Config?.TechStack || '-';
+            document.getElementById('info-phase').textContent = state.CurrentPhase || '-';
+            document.getElementById('info-step').textContent = state.CurrentStep || '-';
+            document.getElementById('info-iterations').textContent = state.Iterations || '0';
+
+            const badge = document.getElementById('status-badge');
+            const statusMap = {0:'待启动',1:'运行中',2:'已完成',3:'失败',4:'已停止'};
+            const classMap = {0:'badge-ghost',1:'badge-primary',2:'badge-success',3:'badge-error',4:'badge-ghost'};
+            badge.textContent = statusMap[state.Status] || '未知';
+            badge.className = 'badge ' + (classMap[state.Status] || 'badge-ghost');
+
+            if(state.Status !== 1) {
+                clearInterval(pollTimer);
+                btnStop.style.display = 'none';
+            }
+
+            // 渲染日志
+            if(state.Log && state.Log.length > 0) {
+                const container = document.getElementById('log-container');
+                container.innerHTML = state.Log.map(function(entry){
+                    const time = new Date(entry.time).toLocaleTimeString();
+                    const color = entry.level === 'error' ? 'var(--color-error)' : entry.level === 'warn' ? 'var(--color-accent)' : 'var(--text-primary)';
+                    return '<div style="color:' + color + ';padding:0.15rem 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-muted);margin-right:0.5rem;">[' + time + ']</span><span style="font-weight:600;color:var(--color-primary);margin-right:0.5rem;">[' + escapeHtml(entry.agent) + ']</span>' + escapeHtml(entry.message) + '</div>';
+                }).join('');
+                container.scrollTop = container.scrollHeight;
+            }
+        } catch(e) {
+            console.error('状态查询失败:', e);
+        }
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+})();
+</script>
+{{end}}

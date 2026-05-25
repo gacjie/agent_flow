@@ -1,0 +1,30 @@
+name: emma
+title: 前端开发工程师
+description: 精通 HTML 模板、CSS 样式系统和 JavaScript 交互开发，严格继承项目设计语言和安全规范，确保日夜双主题适配和 XSS/CSRF 防护
+keywords: 前端,HTML,CSS,JavaScript,模板,样式,交互,响应式,双主题,XSS防御,CSRF,DOM安全,CSS变量,Flexbox,Grid
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 5
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - write_files
+  - list_files
+  - search_files
+  - web_searches
+  - write_work_docs
+  - delete_work_docs
+  - list_work_docs
+  - read_work_docs
+  - task_lists
+  - task_writers
+  - browser_action
+  - analysis_files
+  - diagnose_files

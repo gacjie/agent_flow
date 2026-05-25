@@ -1,0 +1,97 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <div class="flex items-center gap-2 text-sm text-muted mb-2">
+            <a href="/admin/projects" class="hover-underline">项目管理</a>
+            <span>/</span>
+            <span>{{.Project.Name}}</span>
+            <span>/</span>
+            <span>工作区</span>
+        </div>
+        <h1 class="text-2xl font-bold">{{.Title}}</h1>
+    </div>
+    {{if index .Permissions "project.create"}}
+    <a href="/admin/projects/{{.Project.ID}}/workspaces/new" class="btn btn-primary btn-sm">创建工作区</a>
+    {{end}}
+</div>
+
+<div class="table-wrapper">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>标识</th>
+                <th>执行角色</th>
+                <th>状态</th>
+                <th>创建时间</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Workspaces}}
+            <tr id="workspace-row-{{.ID}}">
+                <td>{{.ID}}</td>
+                <td class="font-medium">{{.Label}}</td>
+                <td>{{.Name}}</td>
+                <td>
+                    {{if gt .AgentID 0}}
+                        <span class="badge badge-primary">{{.Agent.Title}} ({{.Agent.Name}})</span>
+                    {{else}}
+                        <span class="badge badge-ghost">未分配</span>
+                    {{end}}
+                </td>
+                <td>
+                    {{if eq .Status 1}}
+                        <span class="badge badge-primary">进行中</span>
+                    {{else if eq .Status 2}}
+                        <span class="badge badge-success">已完成</span>
+                    {{else if eq .Status 3}}
+                        <span class="badge badge-ghost">已暂停</span>
+                    {{end}}
+                </td>
+                <td class="text-sm text-muted">{{formatTime .CreatedAt}}</td>
+                <td>
+                    <div class="flex gap-1">
+                        {{if index $.Permissions "project.edit"}}
+                        <a href="/admin/projects/{{$.Project.ID}}/workspaces/{{.ID}}/edit" class="btn btn-ghost btn-xs">编辑</a>
+                        {{end}}
+                        {{if index $.Permissions "project.delete"}}
+                        <button class="btn btn-error btn-xs"
+                            data-delete-url="/admin/projects/{{$.Project.ID}}/workspaces/{{.ID}}"
+                            data-target="workspace-row-{{.ID}}"
+                            data-confirm="确定要删除工作区 {{.Label}} 吗？">
+                            删除
+                        </button>
+                        {{end}}
+                    </div>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="7" class="text-center opacity-50" style="padding:2rem;">暂无工作区数据</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if and .Paging (gt .Paging.TotalPage 1)}}
+<div class="pagination">
+    {{if gt .Paging.Page 1}}
+        <a href="?page={{sub .Paging.Page 1}}" class="page-btn">上一页</a>
+    {{end}}
+    {{$currentPage := .Paging.Page}}
+    {{range seq 1 .Paging.TotalPage}}
+        {{if eq . $currentPage}}
+            <span class="page-btn page-btn-active">{{.}}</span>
+        {{else}}
+            <a href="?page={{.}}" class="page-btn">{{.}}</a>
+        {{end}}
+    {{end}}
+    {{if lt .Paging.Page .Paging.TotalPage}}
+        <a href="?page={{add .Paging.Page 1}}" class="page-btn">下一页</a>
+    {{end}}
+</div>
+{{end}}
+{{end}}

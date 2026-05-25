@@ -1,0 +1,57 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">{{.Title}}</h1>
+</div>
+
+<div class="card">
+    <div class="table-wrapper">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>标识</th>
+                    <th>描述</th>
+                    <th>分类</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Tools}}
+                <tr>
+                    <td class="font-medium">{{.Label}}</td>
+                    <td><code>{{.Name}}</code></td>
+                    <td>{{truncate .Description 60}}</td>
+                    <td>{{.Category}}</td>
+                    <td>
+                        {{if eq .Status 1}}
+                            <span class="badge badge-success">启用</span>
+                        {{else}}
+                            <span class="badge badge-error">禁用</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if index $.Permissions "tool_mgmt.edit"}}
+                        <form method="POST" action="/admin/system-tools/{{.ID}}/toggle" style="display:inline;">
+                            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                            {{if eq .Status 1}}
+                            <button type="submit" class="btn btn-error btn-xs">禁用</button>
+                            {{else}}
+                            <button type="submit" class="btn btn-primary btn-xs">启用</button>
+                            {{end}}
+                        </form>
+                        {{else}}
+                        <span class="opacity-50">-</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="6" class="text-center opacity-50" style="padding:2rem;">暂无系统工具数据，请重启服务以自动同步</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

@@ -1,0 +1,27 @@
+name: owen
+title: 全栈开发编排师
+description: 编排全栈开发团队，按标准开发生命周期（需求→架构→设计→任务→开发→测试→文档→审查）协调工作，自动识别项目技术栈匹配对应后端工程师，管理测试修复和审查修复的迭代循环
+keywords: 编排,项目管理,多智能体,工作流,全栈开发,开发生命周期,阶段门控,迭代管理,进度跟踪,技术栈识别
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 9
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - call_agent
+  - read_files
+  - write_files
+  - list_files
+  - list_work_docs
+  - read_work_docs
+  - task_lists
+  - task_writers
+  - write_work_docs
+  - delete_work_docs
+  - analysis_work_docs

@@ -1,0 +1,63 @@
+{{define "admin_content"}}
+<div class="max-w-lg">
+    <div class="flex items-center gap-2 text-sm text-muted mb-2">
+        <a href="/admin/projects" class="hover-underline">项目管理</a>
+        <span>/</span>
+        <a href="/admin/projects/{{.Project.ID}}/workspaces" class="hover-underline">{{.Project.Name}}</a>
+        <span>/</span>
+        <span>{{if eq .Method "POST"}}创建{{else}}编辑{{end}}工作区</span>
+    </div>
+    <h1 class="text-2xl font-bold mb-6">{{.Title}}</h1>
+
+    <form action="{{.Action}}" method="POST" data-submit-text="提交中...">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        <div class="form-control">
+            <label class="form-label">名称</label>
+            <input type="text" name="label" value="{{.FormItem.Label}}"
+                   class="input" placeholder="请输入工作区名称"
+                   required maxlength="100">
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">标识</label>
+            <input type="text" name="name" value="{{.FormItem.Name}}"
+                   class="input" placeholder="请输入工作区标识（唯一）"
+                   required minlength="2" maxlength="100"
+                   {{if eq .Method "PUT"}}readonly{{end}}>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">描述</label>
+            <textarea name="description" class="input" rows="3"
+                      placeholder="请输入描述" maxlength="1000">{{.FormItem.Description}}</textarea>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">执行角色</label>
+            <select name="agent_id" class="select">
+                <option value="0">未分配</option>
+                {{range .Agents}}
+                <option value="{{.ID}}" {{if eq .ID $.FormItem.AgentID}}selected{{end}}>{{.Title}} ({{.Name}})</option>
+                {{end}}
+            </select>
+        </div>
+
+        {{if eq .Method "PUT"}}
+        <div class="form-control">
+            <label class="form-label">状态</label>
+            <select name="status" class="select">
+                <option value="1" {{if eq .FormItem.Status 1}}selected{{end}}>进行中</option>
+                <option value="2" {{if eq .FormItem.Status 2}}selected{{end}}>已完成</option>
+                <option value="3" {{if eq .FormItem.Status 3}}selected{{end}}>已暂停</option>
+            </select>
+        </div>
+        {{end}}
+
+        <div class="flex gap-3 pt-4">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="/admin/projects/{{.Project.ID}}/workspaces" class="btn btn-ghost">取消</a>
+        </div>
+    </form>
+</div>
+{{end}}

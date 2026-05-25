@@ -1,0 +1,73 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">{{.Title}}</h1>
+    {{if index .Permissions "tool_mgmt.edit"}}
+    <form method="POST" action="/admin/tools/sync" style="display:inline;">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <button type="submit" class="btn btn-primary btn-sm">从磁盘同步</button>
+    </form>
+    {{end}}
+</div>
+
+<div class="card">
+    <div class="table-wrapper">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>标识</th>
+                    <th>描述</th>
+                    <th>分类</th>
+                    <th>版本</th>
+                    <th>类型</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Tools}}
+                <tr>
+                    <td class="font-medium">{{.Label}}</td>
+                    <td>{{.Name}}</td>
+                    <td>{{truncate .Description 50}}</td>
+                    <td>{{.Category}}</td>
+                    <td>{{.Version}}</td>
+                    <td>
+                        {{if .IsBuiltin}}
+                            <span class="badge badge-primary">内置</span>
+                        {{else}}
+                            <span class="badge badge-ghost">外部</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if eq .Status 1}}
+                            <span class="badge badge-success">启用</span>
+                        {{else}}
+                            <span class="badge badge-error">禁用</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if and (not .IsBuiltin) (index $.Permissions "tool_mgmt.edit")}}
+                        <form method="POST" action="/admin/tools/{{.ID}}/toggle" style="display:inline;">
+                            <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
+                            {{if eq .Status 1}}
+                            <button type="submit" class="btn btn-error btn-xs">禁用</button>
+                            {{else}}
+                            <button type="submit" class="btn btn-primary btn-xs">启用</button>
+                            {{end}}
+                        </form>
+                        {{else}}
+                        <span class="opacity-50">-</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="8" class="text-center opacity-50" style="padding:2rem;">暂无工具数据，请点击"从磁盘同步"加载工具</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

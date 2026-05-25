@@ -1,0 +1,30 @@
+name: ethan
+title: 系统设计师
+description: 深度分析现有代码架构的设计模式和规范，设计与项目风格严格一致的技术方案，输出包含文件结构、模块划分、接口定义和设计决策的完整设计文档
+keywords: 系统设计,架构设计,技术方案,模块设计,接口设计,关注点分离,接口契约,数据流,设计模式,架构决策
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 2
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - write_files
+  - list_files
+  - search_files
+  - web_searches
+  - write_work_docs
+  - delete_work_docs
+  - list_work_docs
+  - read_work_docs
+  - task_lists
+  - analysis_files
+  - diagnose_files
+skills:
+  - api-design

@@ -1,0 +1,162 @@
+{{define "admin_content"}}
+<div class="max-w-lg">
+    <h1 class="text-2xl font-bold mb-6">{{.Title}}</h1>
+
+    <form action="{{.Action}}" method="POST" data-submit-text="提交中...">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        <div class="form-control">
+            <label class="form-label">名称</label>
+            <input type="text" name="name" value="{{.FormItem.Name}}"
+                   class="input" placeholder="请输入项目名称（唯一标识）"
+                   required minlength="2" maxlength="100"
+                   {{if eq .Method "PUT"}}readonly{{end}}>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">描述</label>
+            <textarea name="description" class="input" rows="3"
+                      placeholder="请输入项目描述" maxlength="1000">{{.FormItem.Description}}</textarea>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">项目路径</label>
+            <div style="display:flex;gap:8px;">
+                <input type="text" name="path" id="projectPath" value="{{.FormItem.Path}}"
+                       class="input" style="flex:1;" placeholder="请输入或选择项目目录路径"
+                       required maxlength="500">
+                <button type="button" id="browseBtn" class="btn btn-outline btn-sm" style="white-space:nowrap;">浏览</button>
+            </div>
+        </div>
+
+        {{if eq .Method "PUT"}}
+        <div class="form-control">
+            <label class="form-label">状态</label>
+            <select name="status" class="select">
+                <option value="1" {{if eq .FormItem.Status 1}}selected{{end}}>活跃</option>
+                <option value="2" {{if eq .FormItem.Status 2}}selected{{end}}>归档</option>
+            </select>
+        </div>
+        {{end}}
+
+        <div class="flex gap-3 pt-4">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="/admin/projects" class="btn btn-ghost">取消</a>
+        </div>
+    </form>
+</div>
+
+<div id="dirBrowserOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--bg-surface);border-radius:8px;width:560px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;font-size:1rem;font-weight:600;">选择目录</h3>
+            <button type="button" id="dirCloseBtn" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text-secondary);">&times;</button>
+        </div>
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+            <button type="button" id="dirUpBtn" class="btn btn-ghost btn-xs">上级</button>
+            <span id="dirCurrentPath" style="font-size:0.85rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;"></span>
+        </div>
+        <div id="dirList" style="flex:1;overflow-y:auto;padding:8px 12px;min-height:200px;max-height:400px;"></div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">
+            <button type="button" id="dirCancelBtn" class="btn btn-ghost btn-sm">取消</button>
+            <button type="button" id="dirSelectBtn" class="btn btn-primary btn-sm">选择此目录</button>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{.Nonce}}">
+(function(){
+    var overlay = document.getElementById('dirBrowserOverlay');
+    var dirList = document.getElementById('dirList');
+    var currentPathEl = document.getElementById('dirCurrentPath');
+    var upBtn = document.getElementById('dirUpBtn');
+    var currentDir = '';
+    var parentDir = '';
+
+    function openDirBrowser() {
+        var initPath = document.getElementById('projectPath').value || '';
+        overlay.style.display = 'flex';
+        loadDir(initPath);
+    }
+
+    function closeDirBrowser() {
+        overlay.style.display = 'none';
+    }
+
+    document.getElementById('browseBtn').addEventListener('click', openDirBrowser);
+    document.getElementById('dirCloseBtn').addEventListener('click', closeDirBrowser);
+    document.getElementById('dirCancelBtn').addEventListener('click', closeDirBrowser);
+    upBtn.addEventListener('click', function() {
+        if (parentDir !== undefined && parentDir !== null) {
+            loadDir(parentDir);
+        }
+    });
+    document.getElementById('dirSelectBtn').addEventListener('click', function() {
+        if (currentDir) {
+            document.getElementById('projectPath').value = currentDir;
+        }
+        closeDirBrowser();
+    });
+
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeDirBrowser();
+    });
+
+    function loadDir(dir) {
+        dirList.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-secondary);">加载中...</div>';
+        var url = '/admin/projects/browse-dir';
+        if (dir) url += '?dir=' + encodeURIComponent(dir);
+
+        fetch(url, {credentials:'same-origin'})
+            .then(function(r){ return r.json(); })
+            .then(function(resp){
+                if (resp.code !== 0) {
+                    dirList.innerHTML = '<div style="padding:1rem;color:var(--color-error);">' + (resp.message||'加载失败') + '</div>';
+                    return;
+                }
+                var data = resp.data;
+                currentDir = data.current || '';
+                parentDir = data.parent;
+                currentPathEl.textContent = currentDir || '选择盘符';
+                upBtn.disabled = !parentDir && parentDir !== '';
+
+                if (!data.dirs || data.dirs.length === 0) {
+                    dirList.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-secondary);">此目录下没有子目录</div>';
+                    return;
+                }
+
+                var html = '';
+                for (var i = 0; i < data.dirs.length; i++) {
+                    var d = data.dirs[i];
+                    html += '<div class="dir-item" data-path="' + escHtml(d.path) + '" style="padding:8px 12px;cursor:pointer;border-radius:4px;display:flex;align-items:center;gap:8px;">';
+                    html += '<span style="color:var(--color-primary);">&#128193;</span>';
+                    html += '<span>' + escHtml(d.name) + '</span>';
+                    html += '</div>';
+                }
+                dirList.innerHTML = html;
+
+                dirList.querySelectorAll('.dir-item').forEach(function(el){
+                    el.addEventListener('click', function(){
+                        loadDir(this.getAttribute('data-path'));
+                    });
+                    el.addEventListener('mouseenter', function(){
+                        this.style.background = 'var(--bg-hover, rgba(0,0,0,0.05))';
+                    });
+                    el.addEventListener('mouseleave', function(){
+                        this.style.background = '';
+                    });
+                });
+            })
+            .catch(function(err){
+                dirList.innerHTML = '<div style="padding:1rem;color:var(--color-error);">请求失败: ' + err.message + '</div>';
+            });
+    }
+
+    function escHtml(s) {
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+})();
+</script>
+{{end}}

@@ -1,0 +1,41 @@
+{{define "admin_content"}}
+<h1 class="text-2xl font-bold mb-6">{{.Title}}</h1>
+
+<form action="/admin/config" method="POST">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+    {{$lastGroup := ""}}
+    {{range .Configs}}
+        {{if ne .Group $lastGroup}}
+            {{if ne $lastGroup ""}}
+            </div>
+            {{end}}
+            <h2 class="text-lg font-bold mt-6 mb-3" style="text-transform:capitalize;">{{.Group}}</h2>
+            <div class="card" style="padding:1.5rem;">
+        {{end}}
+
+        <div class="form-control">
+            <label class="form-label">{{.Label}}</label>
+            {{if eq .Type "bool"}}
+            <select name="config_{{.Key}}" class="select">
+                <option value="true" {{if eq .Value "true"}}selected{{end}}>是</option>
+                <option value="false" {{if ne .Value "true"}}selected{{end}}>否</option>
+            </select>
+            {{else if eq .Type "number"}}
+            <input type="number" name="config_{{.Key}}" value="{{.Value}}" class="input">
+            {{else}}
+            <input type="text" name="config_{{.Key}}" value="{{.Value}}" class="input">
+            {{end}}
+        </div>
+
+        {{$lastGroup = .Group}}
+    {{end}}
+    {{if ne $lastGroup ""}}
+    </div>
+    {{end}}
+
+    <div class="flex gap-3 pt-4 mt-4">
+        <button type="submit" class="btn btn-primary">保存配置</button>
+    </div>
+</form>
+{{end}}

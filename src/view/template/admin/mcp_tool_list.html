@@ -1,0 +1,356 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">{{.Title}}</h1>
+    <div class="flex gap-2 items-center">
+        {{if index .Permissions "mcp_tool.view"}}
+        <button id="btn-export" class="btn btn-ghost btn-sm" style="display:none" title="导出选中的工具">
+            导出选中 (<span id="export-count">0</span>)
+        </button>
+        {{end}}
+        {{if index .Permissions "mcp_tool.create"}}
+        <button id="btn-import" class="btn btn-ghost btn-sm" title="从 JSON 文件批量导入">导入MCP服务</button>
+        <button id="btn-add" class="btn btn-primary btn-sm" title="粘贴 JSON 添加">添加MCP服务</button>
+        {{end}}
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrapper">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width:2.5rem"><input type="checkbox" id="check-all"></th>
+                    <th>名称</th>
+                    <th>命令</th>
+                    <th>状态</th>
+                    <th>工具</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Tools}}
+                <tr id="mcp-row-{{.ID}}" data-server-name="{{.Name}}" data-id="{{.ID}}">
+                    <td><input type="checkbox" class="tool-check" value="{{.ID}}"></td>
+                    <td>
+                        <div class="font-medium">{{.Label}}</div>
+                        <div class="text-xs opacity-60"><code>{{.Name}}</code></div>
+                    </td>
+                    <td><code class="text-xs">{{.Command}}</code></td>
+                    <td class="status-cell">
+                        <span class="badge badge-ghost">加载中...</span>
+                    </td>
+                    <td class="tools-cell">-</td>
+                    <td class="action-cell">
+                        <div class="flex gap-1">
+                            {{if index $.Permissions "mcp_tool.edit"}}
+                            <button class="btn btn-primary btn-xs btn-start" style="display:none" data-id="{{.ID}}">启动</button>
+                            <button class="btn btn-error btn-xs btn-stop" style="display:none" data-id="{{.ID}}">停止</button>
+                            <a href="/admin/mcp-tools/{{.ID}}/edit" class="btn btn-ghost btn-xs">编辑</a>
+                            {{end}}
+                            {{if index $.Permissions "mcp_tool.delete"}}
+                            <button class="btn btn-error btn-xs"
+                                data-delete-url="/admin/mcp-tools/{{.ID}}"
+                                data-target="mcp-row-{{.ID}}"
+                                data-confirm="确定要删除 {{.Label}} 吗？">
+                                删除
+                            </button>
+                            {{end}}
+                        </div>
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="6" class="text-center opacity-50" style="padding:2rem;">暂无MCP工具，点击"导入MCP工具"添加</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 添加模态框（粘贴 JSON） -->
+<div id="add-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
+    <div class="card" style="width:640px;max-width:90vw;max-height:85vh;overflow-y:auto;padding:1.5rem;">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold">添加 MCP 服务</h2>
+            <button class="btn btn-ghost btn-xs modal-close" data-modal="add-modal">✕</button>
+        </div>
+        <div id="add-alert-error" class="alert alert-error mb-4" style="display:none"></div>
+        <div id="add-alert-success" class="alert alert-success mb-4" style="display:none"></div>
+        <div class="form-control">
+            <textarea id="add-json-input" class="input font-mono" rows="14"
+                placeholder='粘贴 mcpServers 格式的 JSON，例如：
+{
+  "mcpServers": {
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+}'></textarea>
+        </div>
+        <p class="text-xs opacity-60 mt-2 mb-4">
+            每个 key 作为服务标识，command 映射到执行命令，args 映射到参数。已存在相同标识的服务将被跳过。
+        </p>
+        <div class="flex gap-2">
+            <button id="btn-do-add" class="btn btn-primary">添加</button>
+            <button class="btn btn-ghost modal-close" data-modal="add-modal">取消</button>
+        </div>
+    </div>
+</div>
+
+<!-- 导入模态框（选文件） -->
+<div id="import-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
+    <div class="card" style="width:480px;max-width:90vw;padding:1.5rem;">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold">导入 MCP 服务</h2>
+            <button class="btn btn-ghost btn-xs modal-close" data-modal="import-modal">✕</button>
+        </div>
+        <div id="import-alert-error" class="alert alert-error mb-4" style="display:none"></div>
+        <div id="import-alert-success" class="alert alert-success mb-4" style="display:none"></div>
+        <div class="form-control mb-4">
+            <label class="form-label">选择 mcpServers JSON 文件</label>
+            <input type="file" id="import-file-input" accept=".json" class="input" style="padding:.5rem;">
+        </div>
+        <p class="text-xs opacity-60 mb-4">
+            选择包含 mcpServers 配置的 JSON 文件，支持批量导入多个服务。
+        </p>
+        <div class="flex gap-2">
+            <button id="btn-do-import" class="btn btn-primary">导入</button>
+            <button class="btn btn-ghost modal-close" data-modal="import-modal">取消</button>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{.Nonce}}">
+(function () {
+    function getCsrf() {
+        var m = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function escapeHtml(s) {
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    function truncate(s, max) {
+        if (!s) return '';
+        return s.length > max ? s.substring(0, max) + '...' : s;
+    }
+
+    // ========== 状态轮询 ==========
+    function refreshStatuses() {
+        fetch('/admin/mcp-tools/statuses', { headers: { 'X-CSRF-Token': getCsrf() } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.code !== 0) return;
+            var statuses = data.data || {};
+            document.querySelectorAll('tr[data-server-name]').forEach(function (row) {
+                var name = row.getAttribute('data-server-name');
+                var s = statuses[name];
+                var statusCell = row.querySelector('.status-cell');
+                var toolsCell = row.querySelector('.tools-cell');
+                var startBtn = row.querySelector('.btn-start');
+                var stopBtn = row.querySelector('.btn-stop');
+
+                if (!s || s.state === 'stopped') {
+                    statusCell.innerHTML = '<span class="badge badge-ghost">已停止</span>';
+                    toolsCell.textContent = '-';
+                    if (startBtn) startBtn.style.display = '';
+                    if (stopBtn) stopBtn.style.display = 'none';
+                } else if (s.state === 'running') {
+                    statusCell.innerHTML = '<span class="badge badge-success">运行中</span>';
+                    toolsCell.textContent = s.tool_count + ' 个工具';
+                    if (s.tool_names && s.tool_names.length > 0) {
+                        toolsCell.title = s.tool_names.join(', ');
+                    }
+                    if (startBtn) startBtn.style.display = 'none';
+                    if (stopBtn) stopBtn.style.display = '';
+                } else if (s.state === 'error') {
+                    var errHtml = '<span class="badge badge-error">错误</span>';
+                    if (s.error) {
+                        errHtml += '<div class="text-xs text-error mt-1" style="max-width:20rem;max-height:3rem;overflow-y:auto;white-space:pre-wrap;word-break:break-all;" title="' + escapeHtml(s.error) + '">' + escapeHtml(truncate(s.error, 200)) + '</div>';
+                    }
+                    statusCell.innerHTML = errHtml;
+                    toolsCell.textContent = '-';
+                    if (startBtn) startBtn.style.display = '';
+                    if (stopBtn) stopBtn.style.display = 'none';
+                }
+            });
+        })
+        .catch(function () {});
+    }
+
+    refreshStatuses();
+    setInterval(refreshStatuses, 5000);
+
+    // ========== 启动/停止 ==========
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn-start, .btn-stop');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        var action = btn.classList.contains('btn-start') ? 'start' : 'stop';
+        btn.disabled = true;
+        btn.textContent = action === 'start' ? '启动中...' : '停止中...';
+
+        fetch('/admin/mcp-tools/' + id + '/' + action, {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': getCsrf() }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.code !== 0) alert(data.message || '操作失败');
+            setTimeout(refreshStatuses, 500);
+        })
+        .catch(function () { alert('请求失败'); })
+        .finally(function () {
+            btn.disabled = false;
+            btn.textContent = action === 'start' ? '启动' : '停止';
+        });
+    });
+
+    // ========== 批量勾选 ==========
+    var checkAll = document.getElementById('check-all');
+    var exportBtn = document.getElementById('btn-export');
+    var exportCount = document.getElementById('export-count');
+
+    function updateExportBtn() {
+        var checked = document.querySelectorAll('.tool-check:checked');
+        if (exportBtn) {
+            exportBtn.style.display = checked.length > 0 ? '' : 'none';
+            if (exportCount) exportCount.textContent = checked.length;
+        }
+    }
+
+    if (checkAll) {
+        checkAll.addEventListener('change', function () {
+            document.querySelectorAll('.tool-check').forEach(function (cb) { cb.checked = checkAll.checked; });
+            updateExportBtn();
+        });
+    }
+    document.querySelectorAll('.tool-check').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var all = document.querySelectorAll('.tool-check');
+            var allChecked = document.querySelectorAll('.tool-check:checked');
+            if (checkAll) checkAll.checked = all.length === allChecked.length && all.length > 0;
+            updateExportBtn();
+        });
+    });
+
+    // ========== 批量导出 ==========
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function () {
+            var ids = [];
+            document.querySelectorAll('.tool-check:checked').forEach(function (cb) { ids.push(parseInt(cb.value, 10)); });
+            if (ids.length === 0) return;
+            exportBtn.disabled = true;
+            fetch('/admin/mcp-tools/export', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            })
+            .then(function (resp) {
+                if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.message || '导出失败'); });
+                return resp.blob();
+            })
+            .then(function (blob) {
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url; a.download = 'mcp_servers_export.json';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            })
+            .catch(function (err) { alert('导出失败: ' + err.message); })
+            .finally(function () { exportBtn.disabled = false; });
+        });
+    }
+
+    // ========== 通用模态框工具 ==========
+    function openModal(id) {
+        var m = document.getElementById(id);
+        if (!m) return;
+        m.style.display = 'flex';
+        m.querySelectorAll('.alert').forEach(function (a) { a.style.display = 'none'; });
+    }
+    function closeModal(id) {
+        var m = document.getElementById(id);
+        if (!m) return;
+        m.style.display = 'none';
+        m.querySelectorAll('textarea').forEach(function (t) { t.value = ''; });
+        m.querySelectorAll('input[type="file"]').forEach(function (f) { f.value = ''; });
+    }
+
+    document.querySelectorAll('.modal-close').forEach(function (btn) {
+        btn.addEventListener('click', function () { closeModal(btn.getAttribute('data-modal')); });
+    });
+    document.querySelectorAll('#add-modal, #import-modal').forEach(function (m) {
+        m.addEventListener('click', function (e) { if (e.target === m) closeModal(m.id); });
+    });
+
+    // ========== 添加模态框（粘贴 JSON） ==========
+    var addBtn = document.getElementById('btn-add');
+    var doAddBtn = document.getElementById('btn-do-add');
+
+    if (addBtn) addBtn.addEventListener('click', function () { openModal('add-modal'); });
+
+    function submitImport(formData, alertError, alertSuccess, submitBtn, label) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = label + '中...';
+        fetch('/admin/mcp-tools/import', { method: 'POST', headers: { 'X-CSRF-Token': getCsrf() }, body: formData })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.code === 0) {
+                var d = data.data;
+                var msg = '完成：成功 ' + d.created + ' 个';
+                if (d.skipped > 0) msg += '，跳过 ' + d.skipped + ' 个（已存在：' + d.skipped_names.join(', ') + '）';
+                alertSuccess.textContent = msg;
+                alertSuccess.style.display = '';
+                if (d.created > 0) setTimeout(function () { location.reload(); }, 1500);
+            } else {
+                alertError.textContent = data.message || '操作失败';
+                alertError.style.display = '';
+            }
+        })
+        .catch(function () { alertError.textContent = '请求失败'; alertError.style.display = ''; })
+        .finally(function () { submitBtn.disabled = false; submitBtn.textContent = label; });
+    }
+
+    if (doAddBtn) {
+        doAddBtn.addEventListener('click', function () {
+            var alertError = document.getElementById('add-alert-error');
+            var alertSuccess = document.getElementById('add-alert-success');
+            alertError.style.display = 'none';
+            alertSuccess.style.display = 'none';
+            var text = document.getElementById('add-json-input').value.trim();
+            if (!text) { alertError.textContent = '请输入 mcpServers JSON 内容'; alertError.style.display = ''; return; }
+            var formData = new FormData();
+            formData.append('json_content', text);
+            submitImport(formData, alertError, alertSuccess, doAddBtn, '添加');
+        });
+    }
+
+    // ========== 导入模态框（选文件） ==========
+    var importBtn = document.getElementById('btn-import');
+    var doImportBtn = document.getElementById('btn-do-import');
+
+    if (importBtn) importBtn.addEventListener('click', function () { openModal('import-modal'); });
+
+    if (doImportBtn) {
+        doImportBtn.addEventListener('click', function () {
+            var alertError = document.getElementById('import-alert-error');
+            var alertSuccess = document.getElementById('import-alert-success');
+            alertError.style.display = 'none';
+            alertSuccess.style.display = 'none';
+            var fileInput = document.getElementById('import-file-input');
+            var file = fileInput.files[0];
+            if (!file) { alertError.textContent = '请选择 JSON 文件'; alertError.style.display = ''; return; }
+            var formData = new FormData();
+            formData.append('file', file);
+            submitImport(formData, alertError, alertSuccess, doImportBtn, '导入');
+        });
+    }
+}());
+</script>
+{{end}}

@@ -1,0 +1,30 @@
+name: alex
+title: 代码审查工程师
+description: 以 OWASP Top 10 和项目编码规范为基准进行多维度代码审查，每个问题都有具体代码行引用和可操作的修复方案，问题标注技术栈便于精准分配修复
+keywords: 代码审查,安全审计,OWASP,质量检查,N+1查询,代码异味,严重度分级,修复方案,review,规范检查,测试验证
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 8
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - list_files
+  - search_files
+  - run_command
+  - web_searches
+  - write_work_docs
+  - delete_work_docs
+  - list_work_docs
+  - read_work_docs
+  - task_lists
+  - task_writers
+  - browser_action
+  - analysis_files
+  - diagnose_files

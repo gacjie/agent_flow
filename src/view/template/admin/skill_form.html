@@ -1,0 +1,66 @@
+{{define "admin_content"}}
+<div class="max-w-lg">
+    <h1 class="text-2xl font-bold mb-6">{{.Title}}</h1>
+
+    <form action="{{.Action}}" method="POST" data-submit-text="提交中...">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        <div class="form-control">
+            <label class="form-label">名称</label>
+            <input type="text" name="label" value="{{.FormItem.Label}}"
+                   class="input" placeholder="请输入技能名称"
+                   required maxlength="100">
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">标识</label>
+            <input type="text" name="name" value="{{.FormItem.Name}}"
+                   class="input" placeholder="请输入技能标识（唯一）"
+                   required minlength="2" maxlength="100"
+                   {{if eq .Method "PUT"}}readonly{{end}}>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">描述</label>
+            <input type="text" name="description" value="{{.FormItem.Description}}"
+                   class="input" placeholder="请输入描述" maxlength="1000">
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">关键词</label>
+            <input type="text" name="keywords" value="{{.FormItem.Keywords}}"
+                   class="input" placeholder="逗号分隔" maxlength="500">
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">等级</label>
+            <select name="level" class="select">
+                <option value="1" {{if eq .FormItem.Level 1}}selected{{end}}>基础</option>
+                <option value="2" {{if eq .FormItem.Level 2}}selected{{end}}>进阶</option>
+                <option value="3" {{if eq .FormItem.Level 3}}selected{{end}}>专家</option>
+            </select>
+        </div>
+
+        {{if eq .Method "PUT"}}
+        <div class="form-control">
+            <label class="form-label">状态</label>
+            <select name="status" class="select">
+                <option value="1" {{if eq .FormItem.Status 1}}selected{{end}}>启用</option>
+                <option value="0" {{if eq .FormItem.Status 0}}selected{{end}}>禁用</option>
+            </select>
+        </div>
+        {{end}}
+
+        <div class="form-control">
+            <label class="form-label">技能内容</label>
+            <textarea name="content" class="input" rows="15"
+                      placeholder="请输入技能内容">{{.FormItem.Content}}</textarea>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="/admin/skills" class="btn btn-ghost">取消</a>
+        </div>
+    </form>
+</div>
+{{end}}

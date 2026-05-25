@@ -1,0 +1,351 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">模型管理</h1>
+    <div class="flex gap-2 items-center">
+        {{if index .Permissions "model.view"}}
+        <button id="btn-export" class="btn btn-ghost btn-sm" style="display:none" title="导出选中的模型">
+            导出选中 (<span id="export-count">0</span>)
+        </button>
+        {{end}}
+        {{if index .Permissions "model.create"}}
+        <button id="btn-import" class="btn btn-ghost btn-sm" title="从 JSON 文件导入模型">导入</button>
+        {{end}}
+        {{if index .Permissions "model.create"}}
+        <a href="/admin/models/new" class="btn btn-primary btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            添加模型
+        </a>
+        {{end}}
+    </div>
+</div>
+
+<input type="file" id="import-file" accept=".json" style="display:none">
+
+<div class="table-wrapper">
+    <table class="table">
+        <thead>
+            <tr>
+                <th style="width:2.5rem"><input type="checkbox" id="check-all"></th>
+                <th>标识 (model_id)</th>
+                <th>显示名称</th>
+                <th>协议</th>
+                <th>上游地址</th>
+                <th>输入 Token</th>
+                <th>输出 Token</th>
+                <th>自动切换</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Models}}
+            <tr id="model-row-{{.ID}}">
+                <td><input type="checkbox" class="model-check" value="{{.ID}}"></td>
+                <td>
+                    <code class="text-sm">{{.ModelID}}</code>
+                    {{if .IsDefault}}<span class="badge badge-success" style="margin-left:.25rem">默认</span>{{end}}
+                </td>
+                <td>{{.Name}}</td>
+                <td>
+                    {{if eq .Protocol "anthropic"}}
+                    <span class="badge badge-ghost">Anthropic</span>
+                    {{else if eq .Protocol "openai-response"}}
+                    <span class="badge badge-ghost">OpenAI Responses</span>
+                    {{else if eq .Protocol "gemini"}}
+                    <span class="badge badge-ghost">Gemini</span>
+                    {{else}}
+                    <span class="badge badge-ghost">OpenAI</span>
+                    {{end}}
+                </td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{.BaseURL}}">{{.BaseURL}}</td>
+                <td>{{.MaxInputTokens}}</td>
+                <td>{{.MaxOutputTokens}}</td>
+                <td>
+                    {{if index $.Permissions "model.edit"}}
+                    <button class="btn btn-sm {{if .IsAuto}}btn-primary{{else}}btn-ghost{{end}}"
+                            data-toggle-auto="{{.ID}}"
+                            title="{{if .IsAuto}}已开启，点击关闭{{else}}已关闭，点击开启{{end}}">
+                        {{if .IsAuto}}开启{{else}}关闭{{end}}
+                    </button>
+                    {{else}}
+                    <span class="{{if .IsAuto}}text-primary{{else}}opacity-40{{end}}">{{if .IsAuto}}开启{{else}}关闭{{end}}</span>
+                    {{end}}
+                </td>
+                <td>
+                    <div class="btn-group">
+                        {{if index $.Permissions "model.edit"}}
+                        <button class="btn btn-sm {{if .IsDefault}}btn-primary{{else}}btn-ghost{{end}}"
+                                data-set-default="{{.ID}}"
+                                {{if .IsDefault}}disabled title="当前默认模型"{{end}}>
+                            默认
+                        </button>
+                        <a href="/admin/models/{{.ID}}/edit" class="btn btn-sm btn-ghost">编辑</a>
+                        {{end}}
+                        {{if index $.Permissions "model.view"}}
+                        <button class="btn btn-sm btn-ghost" data-test-connect="{{.ID}}">测试</button>
+                        {{end}}
+                        {{if index $.Permissions "model.delete"}}
+                        <button class="btn btn-sm btn-error"
+                                data-delete-url="/admin/models/{{.ID}}"
+                                data-confirm="确定删除模型「{{.Name}}」？"
+                                data-target="model-row-{{.ID}}">
+                            删除
+                        </button>
+                        {{end}}
+                    </div>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="9" class="text-center text-muted" style="padding:2rem 0">暂无模型，请点击右上角「添加模型」</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if gt .Paging.TotalPage 1}}
+<div class="pagination">
+    {{if gt .Paging.Page 1}}
+    <a href="?page={{sub .Paging.Page 1}}" class="btn btn-ghost btn-sm">上一页</a>
+    {{end}}
+    <span class="pagination-info">第 {{.Paging.Page}} / {{.Paging.TotalPage}} 页，共 {{.Paging.Total}} 条</span>
+    {{if lt .Paging.Page .Paging.TotalPage}}
+    <a href="?page={{add .Paging.Page 1}}" class="btn btn-ghost btn-sm">下一页</a>
+    {{end}}
+</div>
+{{end}}
+
+<script nonce="{{.Nonce}}">
+(function () {
+    function getCsrf() {
+        var m = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    // 切换自动切换状态
+    document.querySelectorAll('[data-toggle-auto]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = btn.getAttribute('data-toggle-auto');
+            fetch('/admin/models/' + id + '/toggle-auto', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json' }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.code === 0) {
+                    var on = data.data.is_auto;
+                    btn.textContent = on ? '开启' : '关闭';
+                    btn.classList.toggle('btn-primary', on);
+                    btn.classList.toggle('btn-ghost', !on);
+                    btn.title = on ? '已开启，点击关闭' : '已关闭，点击开启';
+                } else {
+                    alert(data.message || '操作失败');
+                }
+            })
+            .catch(function () { alert('请求失败'); });
+        });
+    });
+
+    // 设为默认模型
+    document.querySelectorAll('[data-set-default]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (btn.disabled) return;
+            var id = btn.getAttribute('data-set-default');
+            fetch('/admin/models/' + id + '/default', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json' }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.code === 0) {
+                    // 重置所有默认按钮
+                    document.querySelectorAll('[data-set-default]').forEach(function (b) {
+                        b.classList.remove('btn-primary');
+                        b.classList.add('btn-ghost');
+                        b.disabled = false;
+                        b.title = '';
+                        b.textContent = '默认';
+                    });
+                    btn.classList.remove('btn-ghost');
+                    btn.classList.add('btn-primary');
+                    btn.disabled = true;
+                    btn.title = '当前默认模型';
+                    // 刷新"默认"徽章
+                    document.querySelectorAll('.badge-success').forEach(function (el) {
+                        if (el.textContent.trim() === '默认') el.remove();
+                    });
+                    var row = btn.closest('tr');
+                    var codeEl = row.querySelector('td:first-child code');
+                    if (codeEl) {
+                        var badge = document.createElement('span');
+                        badge.className = 'badge badge-success';
+                        badge.style.marginLeft = '0.25rem';
+                        badge.textContent = '默认';
+                        codeEl.after(badge);
+                    }
+                } else {
+                    alert(data.message || '操作失败');
+                }
+            })
+            .catch(function () { alert('请求失败'); });
+        });
+    });
+
+    // 测试连通性
+    document.querySelectorAll('[data-test-connect]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = btn.getAttribute('data-test-connect');
+            var orig = btn.textContent;
+            btn.textContent = '测试中...';
+            btn.disabled = true;
+            fetch('/admin/models/' + id + '/test', {
+                headers: { 'X-CSRF-Token': getCsrf() }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                btn.textContent = orig;
+                btn.disabled = false;
+                if (data.code === 0) {
+                    alert('连通性测试成功 ✓\n响应：' + data.data.content);
+                } else {
+                    alert('连通性测试失败：' + (data.message || '未知错误'));
+                }
+            })
+            .catch(function (err) {
+                btn.textContent = orig;
+                btn.disabled = false;
+                alert('请求异常：' + err);
+            });
+        });
+    });
+
+    // ========== 批量勾选 ==========
+    var checkAll = document.getElementById('check-all');
+    var exportBtn = document.getElementById('btn-export');
+    var exportCount = document.getElementById('export-count');
+
+    function updateExportBtn() {
+        var checked = document.querySelectorAll('.model-check:checked');
+        if (exportBtn) {
+            exportBtn.style.display = checked.length > 0 ? '' : 'none';
+            if (exportCount) exportCount.textContent = checked.length;
+        }
+    }
+
+    if (checkAll) {
+        checkAll.addEventListener('change', function () {
+            document.querySelectorAll('.model-check').forEach(function (cb) {
+                cb.checked = checkAll.checked;
+            });
+            updateExportBtn();
+        });
+    }
+
+    document.querySelectorAll('.model-check').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var all = document.querySelectorAll('.model-check');
+            var allChecked = document.querySelectorAll('.model-check:checked');
+            if (checkAll) checkAll.checked = all.length === allChecked.length && all.length > 0;
+            updateExportBtn();
+        });
+    });
+
+    // ========== 批量导出 ==========
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function () {
+            var ids = [];
+            document.querySelectorAll('.model-check:checked').forEach(function (cb) {
+                ids.push(parseInt(cb.value, 10));
+            });
+            if (ids.length === 0) return;
+
+            exportBtn.disabled = true;
+            var origText = exportBtn.innerHTML;
+            exportBtn.textContent = '导出中...';
+
+            fetch('/admin/models/export', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            })
+            .then(function (resp) {
+                if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.message || '导出失败'); });
+                return resp.blob();
+            })
+            .then(function (blob) {
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'llm_models_export.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            })
+            .catch(function (err) { alert('导出失败: ' + err.message); })
+            .finally(function () {
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = origText;
+                updateExportBtn();
+            });
+        });
+    }
+
+    // ========== 批量导入 ==========
+    var importBtn = document.getElementById('btn-import');
+    var importFile = document.getElementById('import-file');
+
+    if (importBtn && importFile) {
+        importBtn.addEventListener('click', function () { importFile.click(); });
+
+        importFile.addEventListener('change', function () {
+            var file = importFile.files[0];
+            if (!file) return;
+            if (!file.name.endsWith('.json')) {
+                alert('请选择 JSON 文件');
+                importFile.value = '';
+                return;
+            }
+            if (!confirm('确定要导入文件「' + file.name + '」中的模型？已存在的 model_id 将被跳过。')) {
+                importFile.value = '';
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('file', file);
+
+            importBtn.disabled = true;
+            importBtn.textContent = '导入中...';
+
+            fetch('/admin/models/import', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrf() },
+                body: formData
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                importFile.value = '';
+                if (data.code === 0) {
+                    var d = data.data;
+                    var msg = '导入完成：成功 ' + d.created + ' 个';
+                    if (d.skipped > 0) msg += '，跳过 ' + d.skipped + ' 个（已存在：' + d.skipped_ids.join(', ') + '）';
+                    if (d.errors && d.errors.length > 0) msg += '\n错误：' + d.errors.join('\n');
+                    alert(msg);
+                    if (d.created > 0) location.reload();
+                } else {
+                    alert('导入失败: ' + (data.message || '未知错误'));
+                }
+            })
+            .catch(function () {
+                importFile.value = '';
+                alert('导入请求失败');
+            })
+            .finally(function () {
+                importBtn.disabled = false;
+                importBtn.textContent = '导入';
+            });
+        });
+    }
+}());
+</script>
+{{end}}

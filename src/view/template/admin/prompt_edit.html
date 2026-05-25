@@ -1,0 +1,54 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">{{.Title}}</h1>
+</div>
+
+<div class="card" style="padding:1.5rem;">
+    <div style="margin-bottom:1.5rem;">
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+            <span><strong>标识：</strong><code>{{.Prompt.Name}}</code></span>
+            <span><strong>分类：</strong>{{.Prompt.Category}}</span>
+            {{if .Prompt.IsTemplate}}
+            <span class="badge badge-warning">模板型</span>
+            {{end}}
+        </div>
+        <p class="opacity-70" style="margin:0;">{{.Prompt.Description}}</p>
+        {{if .Prompt.IsTemplate}}
+        <p class="opacity-70" style="margin:0.5rem 0 0 0;font-size:0.875rem;">
+            注意：此提示词包含 <code>%s</code> 占位符，编辑时请保留这些占位符，否则系统运行时会出错。
+        </p>
+        {{end}}
+    </div>
+
+    <form method="POST" action="/admin/prompts/{{.Prompt.Name}}">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <div class="form-control" style="margin-bottom:1rem;">
+            <label class="form-label">提示词内容</label>
+            <textarea name="content" class="input font-mono" rows="20" style="font-size:0.875rem;white-space:pre-wrap;">{{.Prompt.Content}}</textarea>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+            <button type="submit" class="btn btn-primary">保存</button>
+            {{if eq .Prompt.Source "custom"}}
+            <button type="button" class="btn btn-error" onclick="resetPrompt('{{.Prompt.Name}}')">重置为默认</button>
+            {{end}}
+            <a href="/admin/prompts" class="btn">取消</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function resetPrompt(name) {
+    if (!confirm('确定要重置为默认提示词吗？自定义内容将被删除。')) return;
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/admin/prompts/' + name + '/reset';
+    var csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = '_csrf';
+    csrf.value = '{{.CSRFToken}}';
+    form.appendChild(csrf);
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
+{{end}}

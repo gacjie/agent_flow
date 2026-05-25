@@ -1,0 +1,48 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">{{.Title}}</h1>
+</div>
+
+<div class="card">
+    <div class="table-wrapper">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>标识</th>
+                    <th>分类</th>
+                    <th>来源</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Prompts}}
+                <tr>
+                    <td class="font-medium">{{.Label}}</td>
+                    <td><code>{{.Name}}</code></td>
+                    <td>{{.Category}}</td>
+                    <td>
+                        {{if eq .Source "custom"}}
+                            <span class="badge badge-success">自定义</span>
+                        {{else}}
+                            <span class="badge badge-default">默认</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if index $.Permissions "prompt.edit"}}
+                        <a href="/admin/prompts/{{.Name}}/edit" class="btn btn-primary btn-xs">编辑</a>
+                        {{else}}
+                        <span class="opacity-50">-</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="5" class="text-center opacity-50" style="padding:2rem;">暂无提示词数据</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

@@ -1,0 +1,104 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <div class="flex items-center gap-2 text-sm text-muted mb-2">
+            <a href="/admin/projects" class="hover-underline">项目管理</a>
+            <span>/</span>
+            <a href="/admin/projects/{{.Workspace.ProjectID}}/workspaces" class="hover-underline">工作区</a>
+            <span>/</span>
+            <span>{{.Workspace.Label}}</span>
+            <span>/</span>
+            <span>任务列表</span>
+        </div>
+        <h1 class="text-2xl font-bold">{{.Title}}</h1>
+    </div>
+    <a href="/admin/workbench?workspace_id={{.Workspace.ID}}" class="btn btn-primary btn-sm">在工作台查看</a>
+</div>
+
+{{/* 统计概览 */}}
+<div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="card p-4 text-center">
+        <div class="text-2xl font-bold">{{index .Stats "total"}}</div>
+        <div class="text-sm text-muted mt-1">全部任务</div>
+    </div>
+    <div class="card p-4 text-center">
+        <div class="text-2xl font-bold text-warning">{{index .Stats "running"}}</div>
+        <div class="text-sm text-muted mt-1">进行中</div>
+    </div>
+    <div class="card p-4 text-center">
+        <div class="text-2xl font-bold text-success">{{index .Stats "completed"}}</div>
+        <div class="text-sm text-muted mt-1">已完成</div>
+    </div>
+    <div class="card p-4 text-center">
+        <div class="text-2xl font-bold text-danger">{{index .Stats "failed"}}</div>
+        <div class="text-sm text-muted mt-1">失败</div>
+    </div>
+</div>
+
+{{if .Tasks}}
+<div class="card">
+    <div class="p-4 border-b">
+        <span class="text-sm text-muted">任务由 AI 在工作台自动创建和更新，此页面为只读展示</span>
+    </div>
+    <div class="task-tree p-4">
+        {{$currentPhase := 0}}
+        {{range .Tasks}}
+        {{if ne .Phase $currentPhase}}
+            {{if ne $currentPhase 0}}</div>{{end}}
+            {{$currentPhase = .Phase}}
+            <div class="task-phase mb-4">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="badge badge-primary">第{{.Phase}}阶段</span>
+                {{if .PhaseLabel}}<span class="font-semibold">{{.PhaseLabel}}</span>{{end}}
+            </div>
+        {{end}}
+
+        {{if eq .ParentID 0}}
+        <div class="task-item flex items-start gap-3 py-2 border-b last:border-0" data-task-id="{{.ID}}">
+            <div class="task-status mt-1 flex-shrink-0">
+                {{if eq .Status 0}}<span class="status-dot status-pending" title="待处理">·</span>
+                {{else if eq .Status 1}}<span class="status-dot status-running" title="进行中">▶</span>
+                {{else if eq .Status 2}}<span class="status-dot status-success" title="已完成">✓</span>
+                {{else if eq .Status 3}}<span class="status-dot status-danger" title="失败">✗</span>
+                {{else}}<span class="status-dot" title="跳过">-</span>{{end}}
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-medium {{if ge .Status 2}}text-muted{{end}}">{{.Title}}</span>
+                    <span class="text-xs text-muted">#{{.ID}}</span>
+                    {{if eq .Priority 1}}<span class="badge badge-warning text-xs">高优先级</span>
+                    {{else if eq .Priority 2}}<span class="badge badge-danger text-xs">紧急</span>{{end}}
+                </div>
+                {{if and .Description (lt .Status 2)}}<div class="text-sm text-muted mt-1 truncate">{{truncate .Description 100}}</div>{{end}}
+                {{if and .Result (ge .Status 2)}}<div class="text-sm text-muted mt-1 truncate">结果: {{truncate .Result 100}}</div>{{end}}
+            </div>
+        </div>
+        {{else}}
+        <div class="task-item task-subtask flex items-start gap-3 py-2 border-b last:border-0 pl-8">
+            <div class="task-status mt-1 flex-shrink-0">
+                {{if eq .Status 0}}<span class="status-dot status-pending text-xs">·</span>
+                {{else if eq .Status 1}}<span class="status-dot status-running text-xs">▶</span>
+                {{else if eq .Status 2}}<span class="status-dot status-success text-xs">✓</span>
+                {{else if eq .Status 3}}<span class="status-dot status-danger text-xs">✗</span>
+                {{else}}<span class="status-dot text-xs">-</span>{{end}}
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm {{if ge .Status 2}}text-muted{{end}}">{{.Title}}</span>
+                    <span class="text-xs text-muted">#{{.ID}}</span>
+                </div>
+                {{if and .Result (ge .Status 2)}}<div class="text-xs text-muted mt-0.5 truncate">结果: {{truncate .Result 80}}</div>{{end}}
+            </div>
+        </div>
+        {{end}}
+        {{end}}
+        {{if .Tasks}}</div>{{end}}
+    </div>
+</div>
+{{else}}
+<div class="card p-8 text-center text-muted">
+    <p>暂无任务记录</p>
+    <p class="text-sm mt-2">在工作台与 AI 对话，AI 会自动创建并管理任务</p>
+</div>
+{{end}}
+{{end}}

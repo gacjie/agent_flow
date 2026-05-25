@@ -1,0 +1,61 @@
+{{define "admin_content"}}
+<div class="max-w-lg">
+    <h1 class="text-2xl font-bold mb-6">{{.Title}}</h1>
+
+    <form action="{{.Action}}" method="POST" data-submit-text="提交中...">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        <div class="form-control">
+            <label class="form-label">用户名</label>
+            <input type="text" name="username" value="{{.FormAdmin.Username}}"
+                   class="input" placeholder="请输入用户名"
+                   required minlength="2" maxlength="50"
+                   {{if eq .Method "PUT"}}readonly{{end}}>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">邮箱</label>
+            <input type="email" name="email" value="{{.FormAdmin.Email}}"
+                   class="input" placeholder="请输入邮箱" required>
+        </div>
+
+        {{if ne .Method "PUT"}}
+        <div class="form-control">
+            <label class="form-label">密码</label>
+            <input type="password" name="password" class="input"
+                   placeholder="请输入密码（至少6位）" required minlength="6">
+        </div>
+        {{end}}
+
+        <div class="form-control">
+            <label class="form-label">昵称</label>
+            <input type="text" name="nickname" value="{{.FormAdmin.Nickname}}"
+                   class="input" placeholder="请输入昵称（可选）" maxlength="50">
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">角色</label>
+            <select name="role_id" class="select">
+                {{range .Roles}}
+                <option value="{{.ID}}" {{if eq .ID $.FormAdmin.RoleID}}selected{{end}}>{{.Label}}</option>
+                {{end}}
+            </select>
+        </div>
+
+        {{if eq .Method "PUT"}}
+        <div class="form-control">
+            <label class="form-label">状态</label>
+            <select name="status" class="select">
+                <option value="1" {{if eq .FormAdmin.Status 1}}selected{{end}}>启用</option>
+                <option value="0" {{if eq .FormAdmin.Status 0}}selected{{end}}>禁用</option>
+            </select>
+        </div>
+        {{end}}
+
+        <div class="flex gap-3 pt-4">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="/admin/members" class="btn btn-ghost">取消</a>
+        </div>
+    </form>
+</div>
+{{end}}

@@ -1,0 +1,42 @@
+{{define "admin_content"}}
+<div class="max-w-lg">
+    <h1 class="text-2xl font-bold mb-6">个人资料</h1>
+
+    {{if .Error}}
+    <div class="alert-error mb-6">{{.Error}}</div>
+    {{end}}
+    {{if .Success}}
+    <div class="alert-success mb-6">{{.Success}}</div>
+    {{end}}
+
+    <form action="/admin/profile" method="POST" data-submit-text="保存中...">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        <div class="form-control">
+            <label class="form-label">用户名</label>
+            <input type="text" value="{{.FormAdmin.Username}}" class="input" readonly>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">角色</label>
+            <input type="text" value="{{.FormAdmin.Role.Label}}" class="input" readonly>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">邮箱</label>
+            <input type="email" name="email" value="{{.FormAdmin.Email}}"
+                   class="input" placeholder="请输入邮箱">
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">昵称</label>
+            <input type="text" name="nickname" value="{{.FormAdmin.Nickname}}"
+                   class="input" placeholder="请输入昵称">
+        </div>
+
+        <div class="flex gap-3 pt-4">
+            <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+    </form>
+</div>
+{{end}}

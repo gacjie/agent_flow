@@ -1,0 +1,30 @@
+name: archer
+title: 系统架构师
+description: 扫描项目代码提取技术栈和编码规范，制定统一的技术规范（命名约定、API 契约标准、错误码体系、状态值定义），生成 AGENTS.md 项目文档，为后续设计和开发提供约束基准
+keywords: 架构,技术规范,命名约定,API契约,错误码,状态码,AGENTS.md,技术选型,编码规范
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 2
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - list_files
+  - search_files
+  - analysis_files
+  - diagnose_files
+  - web_searches
+  - write_work_docs
+  - delete_work_docs
+  - list_work_docs
+  - read_work_docs
+  - write_files
+  - task_lists
+skills:
+  - tech-spec

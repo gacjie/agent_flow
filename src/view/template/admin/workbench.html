@@ -1,0 +1,502 @@
+{{define "admin_content"}}
+<style>
+/* 工作台页面布局 */
+.wb-page { display: flex; flex-direction: column; height: calc(100vh - 3.5rem); margin: -1.5rem -2rem; }
+
+/* 顶栏 */
+.wb-toolbar { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-shrink: 0; flex-wrap: wrap; }
+.wb-toolbar-left { display: flex; align-items: center; gap: 0.5rem; }
+.wb-toolbar-right { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
+
+/* 移动端切换按钮 */
+.wb-mobile-toggle { display: none; background: none; border: 1px solid var(--border); border-radius: 0.375rem; padding: 0.375rem; cursor: pointer; color: var(--text-secondary); flex-shrink: 0; }
+.wb-mobile-toggle svg { width: 1.125rem; height: 1.125rem; display: block; }
+
+/* 主体布局 */
+.wb-body { display: flex; flex: 1; min-height: 0; }
+
+/* 左侧面板 */
+.wb-sidebar { width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-surface); flex-shrink: 0; }
+
+/* 工作区选择区 */
+.wb-ws-section { padding: 0.75rem; border-bottom: 1px solid var(--border); }
+.wb-ws-section .select { width: 100%; margin-bottom: 0.5rem; font-size: 0.85rem; padding: 0.4rem 0.5rem; }
+.wb-ws-actions { display: flex; align-items: center; gap: 0.5rem; }
+
+/* 会话区域 */
+.wb-sidebar-header { padding: 0.75rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.wb-sidebar-header h3 { margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+
+/* 会话列表 */
+.wb-star { color: var(--color-accent); flex-shrink: 0; margin-right: 0.25rem; }
+.wb-session-list { flex: 1; overflow-y: auto; padding: 0.375rem; }
+.wb-session-item { padding: 0.5rem 0.75rem; border-radius: 0.375rem; cursor: pointer; margin-bottom: 0.125rem; display: flex; align-items: center; justify-content: space-between; transition: background 0.15s; font-size: 0.85rem; }
+.wb-session-item:hover { background: var(--bg-surface-hover); }
+.wb-session-item.active { background: var(--color-primary); color: var(--color-primary-text); }
+.wb-session-item.active::before { background: var(--color-primary-text); opacity: 0.5; }
+.wb-session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.wb-session-delete { opacity: 0; font-size: 0.8rem; cursor: pointer; padding: 0.15rem 0.35rem; border-radius: 0.25rem; line-height: 1; flex-shrink: 0; }
+.wb-session-item:hover .wb-session-delete { opacity: 0.4; }
+.wb-agent-badge { font-size: 0.75rem; flex-shrink: 0; margin-right: 0.25rem; }
+.wb-session-delete:hover { opacity: 1 !important; background: var(--color-error-bg); color: var(--color-error); }
+
+/* 右侧主区域 */
+.wb-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* 消息区域 */
+.wb-messages { flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; }
+.wb-message { margin-bottom: 1.25rem; display: flex; gap: 0.75rem; max-width: 800px; }
+.wb-message-user { margin-left: auto; flex-direction: row-reverse; }
+.wb-message-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 600; flex-shrink: 0; }
+.wb-message-user .wb-message-avatar { background: var(--color-primary); color: white; }
+.wb-message-assistant .wb-message-avatar { background: var(--color-secondary); color: white; }
+.wb-message-body { flex: 1; min-width: 0; }
+.wb-message-user .wb-message-body { text-align: right; }
+.wb-message-role { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+.wb-message-bubble { display: inline-block; text-align: left; padding: 0.625rem 0.875rem; border-radius: 0.75rem; font-size: 0.9rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-width: 100%; }
+.wb-message-user .wb-message-bubble { background: var(--color-primary); color: white; border-bottom-right-radius: 0.25rem; }
+.wb-message-assistant .wb-message-bubble { background: var(--bg-surface); border: 1px solid var(--border); border-bottom-left-radius: 0.25rem; }
+.wb-message-bubble code { background: rgba(0,0,0,0.06); padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.85em; }
+.wb-message-bubble pre { background: var(--bg-base); padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.5rem 0; border: 1px solid var(--border); }
+.wb-message-bubble pre code { background: none; padding: 0; }
+.wb-message-error { color: var(--color-danger, #e53e3e); }
+
+/* 工具调用/结果 */
+.wb-tool-call { background: var(--bg-surface); border: 1px solid var(--border); border-left: 3px solid var(--color-primary); border-radius: 0.5rem; padding: 0; margin: 0.5rem 0; font-size: 0.8rem; max-width: 800px; overflow: hidden; transition: box-shadow 0.2s; }
+.wb-tool-call:hover { box-shadow: var(--shadow); }
+.wb-tool-call-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; cursor: pointer; user-select: none; }
+.wb-tool-call-icon { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--color-primary); }
+.wb-tool-call-name { font-weight: 600; color: var(--color-primary); flex: 1; }
+.wb-tool-call-toggle { width: 0.875rem; height: 0.875rem; flex-shrink: 0; color: var(--text-muted); transition: transform 0.2s; }
+.wb-tool-call.wb-expanded .wb-tool-call-toggle { transform: rotate(180deg); }
+.wb-tool-call-args { display: none; padding: 0.375rem 0.75rem 0.5rem; border-top: 1px dashed var(--border); color: var(--text-muted); word-break: break-all; white-space: pre-wrap; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 0.75rem; line-height: 1.5; max-height: 160px; overflow-y: auto; }
+.wb-tool-call.wb-expanded .wb-tool-call-args { display: block; }
+.wb-tool-result { background: var(--bg-surface); border: 1px solid var(--border); border-left: 3px solid var(--color-success); border-radius: 0.5rem; padding: 0; margin: 0.25rem 0 0.5rem; font-size: 0.8rem; max-width: 800px; overflow: hidden; }
+.wb-tool-result-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; cursor: pointer; user-select: none; }
+.wb-tool-result-icon { width: 0.875rem; height: 0.875rem; flex-shrink: 0; color: var(--color-success); }
+.wb-tool-result-label { font-size: 0.75rem; color: var(--text-muted); flex: 1; }
+.wb-tool-result-toggle { width: 0.875rem; height: 0.875rem; flex-shrink: 0; color: var(--text-muted); transition: transform 0.2s; }
+.wb-tool-result.wb-expanded .wb-tool-result-toggle { transform: rotate(180deg); }
+.wb-tool-result-body { display: none; padding: 0.5rem 0.75rem 0.75rem; border-top: 1px dashed var(--border); color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 0.75rem; line-height: 1.6; max-height: 420px; overflow-y: auto; }
+.wb-tool-result.wb-expanded .wb-tool-result-body { display: block; }
+.wb-tool-result.wb-expanded .wb-tool-result-header { background: rgba(59,130,246,0.04); }
+
+/* 工具调用失败（红色错误态） */
+.wb-tool-result.wb-tool-error { border-left-color: var(--color-error, #ef4444); }
+.wb-tool-result.wb-tool-error .wb-tool-result-icon { color: var(--color-error, #ef4444); }
+.wb-tool-result.wb-tool-error .wb-tool-result-label { color: var(--color-error, #ef4444); font-weight: 500; }
+
+/* 运行状态提示（429 重试、模型切换等） */
+.wb-status-notice { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; margin: 0.25rem 0 0.5rem; font-size: 0.75rem; color: var(--text-muted); max-width: 800px; }
+.wb-status-notice::before { content: '⏳'; }
+
+/* 输入区 */
+.wb-input-area { border-top: 1px solid var(--border); padding: 0.5rem 1.25rem 0.75rem; display: flex; flex-direction: column; gap: 0.375rem; background: var(--bg-base); flex-shrink: 0; }
+.wb-input-selectors { display: flex; gap: 0.5rem; align-items: center; }
+.wb-input-select { padding: 0.25rem 0.5rem; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 0.375rem; background: var(--bg-surface); color: var(--text-primary); max-width: 200px; cursor: pointer; }
+.wb-input-select:focus { outline: none; border-color: var(--color-primary); }
+.wb-input-row { display: flex; gap: 0.75rem; align-items: flex-end; }
+.wb-input-row textarea { flex: 1; resize: none; border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.625rem 0.875rem; font-size: 0.9rem; min-height: 44px; max-height: 150px; background: var(--bg-surface); color: var(--text-primary); font-family: inherit; transition: border-color 0.2s; }
+.wb-input-row textarea:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+.wb-send-btn { padding: 0.625rem 1.25rem; background: var(--color-primary); color: white; border: none; border-radius: 0.75rem; cursor: pointer; font-size: 0.875rem; font-weight: 500; white-space: nowrap; transition: background 0.2s; }
+.wb-send-btn:hover { background: var(--color-primary-hover); }
+.wb-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.wb-send-btn.wb-stop-btn { background: var(--color-danger, #ef4444); }
+.wb-send-btn.wb-stop-btn:hover { background: #dc2626; }
+.wb-message-stopped { color: var(--text-muted); font-style: italic; }
+
+/* 空状态 */
+.wb-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 0.9rem; gap: 0.5rem; }
+.wb-empty svg { width: 3rem; height: 3rem; opacity: 0.3; }
+
+/* 打字动画 */
+.wb-typing { display: inline-block; }
+.wb-typing::after { content: '...'; animation: wbTyping 1.5s infinite; }
+@keyframes wbTyping { 0%,20% { content: '.'; } 40% { content: '..'; } 60%,100% { content: '...'; } }
+
+/* 推理/思考区域 */
+.wb-reasoning { font-size: 0.8rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.5rem; margin-bottom: 0.5rem; max-height: 150px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+.wb-reasoning-done { max-height: 2.4rem; overflow: hidden; opacity: 0.5; cursor: pointer; transition: max-height 0.3s, opacity 0.3s; }
+.wb-reasoning-done.wb-reasoning-expanded { max-height: 300px; overflow-y: auto; opacity: 0.7; }
+
+/* 移动端遮罩 */
+.wb-sidebar-overlay { display: none; position: fixed; inset: 0; top: 3.5rem; background: rgba(0,0,0,0.3); z-index: 199; }
+.wb-sidebar-overlay.active { display: block; }
+
+/* 隐藏类 */
+.wb-hidden { display: none !important; }
+
+/* 会话总结区块 */
+.wb-summary-block { position: relative; margin-top: 1.5rem; padding: 1rem 1.25rem; max-width: 800px; border-radius: 0.75rem; background: var(--color-success-bg); border: 1px solid var(--color-success); border-left: 4px solid var(--color-success); }
+.wb-summary-block::before { content: ''; position: absolute; top: -1rem; left: 0; right: 0; height: 1px; background: linear-gradient(to right, var(--color-success), transparent); }
+.wb-summary-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.625rem; font-size: 0.85rem; font-weight: 600; color: var(--color-success); }
+.wb-summary-icon { width: 1.125rem; height: 1.125rem; flex-shrink: 0; }
+.wb-summary-body { font-size: 0.875rem; line-height: 1.7; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+
+/* 模态框 */
+.wb-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 300; align-items: center; justify-content: center; }
+.wb-modal-overlay.active { display: flex; }
+.wb-modal { background: var(--bg-base); border-radius: 0.75rem; box-shadow: var(--shadow-md); width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.wb-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+.wb-modal-header h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.wb-modal-close { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 1.25rem; padding: 0.25rem; border-radius: 0.25rem; line-height: 1; }
+.wb-modal-close:hover { color: var(--text-primary); background: var(--bg-surface-hover); }
+.wb-modal-body { padding: 1.25rem; }
+.wb-modal-body .form-control { margin-bottom: 0.875rem; }
+.wb-modal-body .form-label { display: block; margin-bottom: 0.375rem; font-size: 0.85rem; font-weight: 500; color: var(--text-secondary); }
+.wb-modal-body .input, .wb-modal-body .select { width: 100%; padding: 0.45rem 0.75rem; font-size: 0.85rem; }
+.wb-modal-body .form-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+.wb-modal-footer { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); }
+
+/* 子会话状态徽章 */
+.wb-status-badge { display:inline-block; width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-right:0.25rem; }
+.wb-status-running { background:var(--color-accent,#f59e0b); animation:wbPulse 1.5s ease-in-out infinite; }
+.wb-status-done    { background:#10b981; }
+.wb-status-error   { background:#ef4444; }
+@keyframes wbPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.85)} }
+
+/* 任务面板（右侧） */
+.wb-task-panel { width: var(--wb-panel-width, 300px); border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-surface); flex-shrink: 0; overflow: hidden; position: relative; }
+.wb-task-header { padding: 0.75rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.wb-task-header h3 { margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+.wb-task-close { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 1.1rem; padding: 0.15rem 0.35rem; border-radius: 0.25rem; line-height: 1; }
+.wb-task-close:hover { color: var(--text-primary); background: var(--bg-surface-hover); }
+.wb-task-stats { display: flex; gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.75rem; }
+.wb-task-stat { display: flex; align-items: center; gap: 0.25rem; color: var(--text-muted); }
+.wb-task-stat-val { font-weight: 600; color: var(--text-primary); }
+.wb-task-stat-running .wb-task-stat-val { color: var(--color-accent, #f59e0b); }
+.wb-task-stat-done .wb-task-stat-val { color: var(--color-success, #10b981); }
+.wb-task-stat-failed .wb-task-stat-val { color: var(--color-error, #ef4444); }
+.wb-task-list { flex: 1; overflow-y: auto; padding: 0.5rem; }
+.wb-task-phase { margin-bottom: 0.75rem; }
+.wb-task-phase-header { display: flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.375rem; font-size: 0.75rem; font-weight: 600; color: var(--color-primary); margin-bottom: 0.25rem; cursor: pointer; user-select: none; border-radius: 0.375rem; }
+.wb-task-phase-header:hover { background: var(--bg-surface-hover); }
+.wb-task-phase-toggle { width: 0.9rem; height: 0.9rem; flex-shrink: 0; transition: transform 0.2s ease; }
+.wb-task-phase.wb-expanded > .wb-task-phase-header .wb-task-phase-toggle { transform: rotate(90deg); }
+.wb-task-phase-body { display: none; }
+.wb-task-phase.wb-expanded > .wb-task-phase-body { display: block; }
+.wb-task-actions { display: flex; gap: 0.25rem; margin-left: auto; }
+.wb-task-action-btn { background: none; border: 1px solid var(--border); border-radius: 0.25rem; padding: 0.15rem 0.375rem; cursor: pointer; color: var(--text-muted); font-size: 0.65rem; line-height: 1.2; display: flex; align-items: center; gap: 0.2rem; }
+.wb-task-action-btn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+.wb-task-phase-badge { background: var(--color-primary); color: white; border-radius: 0.25rem; padding: 0.1rem 0.375rem; font-size: 0.65rem; font-weight: 600; }
+.wb-task-node { position: relative; }
+.wb-task-node-parent > .wb-task-item { margin-bottom: 0.125rem; }
+.wb-task-item { display: flex; align-items: flex-start; gap: 0.375rem; padding: 0.35rem 0.375rem; border-radius: 0.375rem; font-size: 0.78rem; line-height: 1.45; }
+.wb-task-item:hover { background: var(--bg-surface-hover); }
+.wb-task-item-collapsible { cursor: pointer; }
+.wb-task-toggle { width: 1rem; height: 1rem; padding: 0; margin-top: 0.12rem; border: none; background: transparent; color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; }
+.wb-task-toggle svg { width: 0.9rem; height: 0.9rem; transition: transform 0.2s ease; }
+.wb-task-node.wb-expanded > .wb-task-item .wb-task-toggle svg { transform: rotate(90deg); }
+.wb-task-icon { flex-shrink: 0; margin-top: 0.1rem; }
+.wb-task-icon-pending { color: var(--text-muted); }
+.wb-task-icon-running { color: var(--color-accent, #f59e0b); }
+.wb-task-icon-done { color: var(--color-success, #10b981); }
+.wb-task-icon-failed { color: var(--color-error, #ef4444); }
+.wb-task-icon-skipped { color: var(--text-muted); }
+.wb-task-main { flex: 1; min-width: 0; }
+.wb-task-title { display: block; white-space: normal; word-break: break-word; }
+.wb-task-title-done { color: var(--text-muted); text-decoration: line-through; }
+.wb-task-subtask { }
+.wb-task-id { flex-shrink: 0; font-size: 0.65rem; color: var(--text-muted); margin-left: 0.25rem; }
+.wb-task-children { display: none; margin-left: 0.875rem; padding-left: 0.375rem; border-left: 1px dashed var(--border); }
+.wb-task-node.wb-expanded > .wb-task-children { display: block; }
+.wb-toolbar-btn { background: none; border: 1px solid var(--border); border-radius: 0.375rem; padding: 0.375rem; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; transition: background 0.15s; }
+.wb-toolbar-btn:hover { background: var(--bg-surface-hover); }
+.wb-toolbar-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+
+/* 文档面板（右侧） */
+.wb-docs-panel { width: var(--wb-panel-width, 300px); border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-surface); flex-shrink: 0; overflow: hidden; position: relative; }
+.wb-docs-header { padding: 0.75rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.wb-docs-header h3 { margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; }
+.wb-docs-close { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 1.1rem; padding: 0.15rem 0.35rem; border-radius: 0.25rem; line-height: 1; }
+.wb-docs-close:hover { color: var(--text-primary); background: var(--bg-surface-hover); }
+.wb-docs-list { flex: 1; overflow-y: auto; padding: 0.5rem; }
+.wb-docs-scope { margin-bottom: 0.75rem; }
+.wb-docs-scope-header { display: flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.375rem; font-size: 0.75rem; font-weight: 600; color: var(--color-primary); margin-bottom: 0.25rem; }
+.wb-docs-scope-badge { background: var(--color-primary); color: white; border-radius: 0.25rem; padding: 0.1rem 0.375rem; font-size: 0.65rem; font-weight: 600; }
+.wb-doc-item { display: flex; align-items: center; gap: 0.375rem; padding: 0.35rem 0.375rem; border-radius: 0.25rem; font-size: 0.78rem; line-height: 1.4; }
+.wb-doc-item:hover { background: var(--bg-surface-hover); }
+.wb-doc-icon { flex-shrink: 0; color: var(--text-muted); }
+.wb-doc-info { flex: 1; min-width: 0; }
+.wb-doc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-doc-meta { font-size: 0.65rem; color: var(--text-muted); }
+.wb-doc-view-btn { flex-shrink: 0; background: none; border: 1px solid var(--border); border-radius: 0.25rem; padding: 0.15rem 0.4rem; font-size: 0.7rem; cursor: pointer; color: var(--color-primary); transition: background 0.15s; }
+.wb-doc-view-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+
+/* 文档查看模态框 */
+.wb-doc-modal { width: 80vw; max-height: 80vh; }
+.wb-doc-modal .wb-modal-body { padding: 0; }
+.wb-doc-content { padding: 1rem 1.25rem; white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; line-height: 1.7; max-height: calc(80vh - 4rem); overflow-y: auto; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+.wb-doc-modal-actions { display: flex; align-items: center; gap: 0.5rem; }
+.wb-doc-editor { width: 100%; min-height: 400px; max-height: calc(80vh - 4rem); padding: 1rem 1.25rem; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 0.85rem; line-height: 1.7; border: none; resize: none; background: var(--bg-base); color: var(--text-primary); outline: none; box-sizing: border-box; }
+
+/* 拖拽手柄 */
+.wb-resize-handle { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent; z-index: 10; transition: background 0.15s; }
+.wb-resize-handle:hover, .wb-resize-handle.wb-resizing { background: var(--color-primary); }
+
+/* 项目文件树 */
+.wb-files-list { flex: 1; overflow-y: auto; padding: 0.5rem; }
+.wb-file-item { display: flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.375rem; border-radius: 0.25rem; font-size: 0.78rem; cursor: pointer; user-select: none; }
+.wb-file-item:hover { background: var(--bg-surface-hover); }
+.wb-file-toggle { flex-shrink: 0; width: 0.75rem; height: 0.75rem; color: var(--text-muted); transition: transform 0.15s; }
+.wb-file-toggle.wb-expanded { transform: rotate(90deg); }
+.wb-file-icon { flex-shrink: 0; width: 1rem; height: 1rem; color: var(--text-muted); }
+.wb-file-icon-dir { color: var(--color-primary); }
+.wb-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-file-size { font-size: 0.65rem; color: var(--text-muted); flex-shrink: 0; }
+.wb-file-children { margin-left: 1rem; display: none; }
+.wb-file-children.wb-expanded { display: block; }
+
+/* Token 徽章 */
+.wb-token-badge { font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; white-space: nowrap; background: var(--bg-surface); padding: 0.125rem 0.5rem; border-radius: 0.75rem; border: 1px solid var(--border); }
+.wb-task-stat-tokens { margin-left: auto; }
+.wb-task-stat-tokens .wb-task-stat-val { color: var(--color-primary); }
+.wb-session-tokens { font-size: 0.65rem; color: var(--text-muted); flex-shrink: 0; margin-right: 0.25rem; white-space: nowrap; }
+.wb-session-item.active .wb-session-tokens { color: rgba(255,255,255,0.7); }
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .wb-page { margin: -1rem; height: calc(100vh - 3.5rem); }
+    .wb-sidebar { position: fixed; top: 3.5rem; left: -300px; width: 280px; height: calc(100vh - 3.5rem); z-index: 200; box-shadow: var(--shadow-md); transition: left 0.25s ease; }
+    .wb-sidebar.wb-sidebar-open { left: 0; }
+    .wb-sidebar-overlay.active { display: block; }
+    .wb-mobile-toggle { display: block; }
+    .wb-messages { padding: 1rem; }
+    .wb-input-area { padding: 0.375rem 0.5rem 0.5rem; }
+    .wb-input-selectors { flex-wrap: wrap; }
+    .wb-input-select { max-width: 150px; }
+    .wb-toolbar { padding: 0.375rem 0.75rem; }
+    .wb-task-panel { position: fixed; top: 3.5rem; right: -320px; width: 300px; height: calc(100vh - 3.5rem); z-index: 200; box-shadow: var(--shadow-md); transition: right 0.25s ease; }
+    .wb-task-panel.wb-task-open { right: 0; }
+    .wb-docs-panel { position: fixed; top: 3.5rem; right: -320px; width: 300px; height: calc(100vh - 3.5rem); z-index: 200; box-shadow: var(--shadow-md); transition: right 0.25s ease; }
+    .wb-docs-panel.wb-docs-open { right: 0; }
+    .wb-proj-docs-panel { position: fixed; top: 3.5rem; right: -320px; width: 300px; height: calc(100vh - 3.5rem); z-index: 200; box-shadow: var(--shadow-md); transition: right 0.25s ease; }
+    .wb-proj-docs-panel.wb-docs-open { right: 0; }
+}
+</style>
+
+<div class="wb-page">
+    <!-- 顶部工具栏 -->
+    <div class="wb-toolbar">
+        <div class="wb-toolbar-left">
+            <button class="wb-mobile-toggle" id="wb-toggle-sidebar" title="侧边栏">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+            <span style="font-weight:600;font-size:0.9rem;color:var(--text-primary);">工作台</span>
+        </div>
+        <div class="wb-toolbar-right">
+            <button id="wb-toggle-docs" class="wb-toolbar-btn" title="工作区文档" style="display:none;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            </button>
+            <button id="wb-toggle-proj-docs" class="wb-toolbar-btn" title="项目文档" style="display:none;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            </button>
+            <button id="wb-toggle-tasks" class="wb-toolbar-btn" title="任务面板" style="display:none;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </button>
+            <button id="wb-toggle-files" class="wb-toolbar-btn" title="项目文件" style="display:none;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <span id="wb-toolbar-ws-info" style="font-size:0.8rem;color:var(--text-muted);"></span>
+        </div>
+    </div>
+
+    <div class="wb-body">
+        <!-- 移动端遮罩 -->
+        <div id="wb-sidebar-overlay" class="wb-sidebar-overlay"></div>
+
+        <!-- 左侧面板 -->
+        <div id="wb-sidebar" class="wb-sidebar">
+            <!-- 工作区选择 -->
+            <div class="wb-ws-section">
+                <select id="wb-sel-workspace" class="select">
+                    <option value="">-- 选择工作区 --</option>
+                    {{range .Workspaces}}
+                    <option value="{{.ID}}" data-agent="{{.AgentID}}" {{if $.Workspace}}{{if eq $.Workspace.ID .ID}}selected{{end}}{{end}}>{{.Label}}</option>
+                    {{end}}
+                </select>
+                <div class="wb-ws-actions">
+                    <button id="wb-btn-new-workspace" class="btn btn-primary btn-xs" style="flex:1;">+ 创建工作区</button>
+                </div>
+            </div>
+
+            <!-- 会话区域 -->
+            <div class="wb-sidebar-header">
+                <h3>会话列表</h3>
+                <button id="wb-btn-new-session" class="btn btn-primary btn-xs">新建</button>
+            </div>
+
+            <!-- 会话列表 -->
+            <div id="wb-session-list" class="wb-session-list">
+                <div class="wb-empty" style="padding:2rem 0;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>{{if .Workspace}}暂无会话{{else}}请先选择工作区{{end}}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧主区域 -->
+        <div class="wb-main">
+            <!-- 消息区域 -->
+            <div id="wb-messages" class="wb-messages">
+                <div class="wb-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>{{if .Workspace}}选择或创建一个会话开始对话{{else}}请先在左侧选择工作区{{end}}</span>
+                </div>
+            </div>
+
+            <!-- 底部输入区 -->
+            <div class="wb-input-area">
+                <div class="wb-input-selectors" id="wb-input-selectors">
+                    <select id="wb-sel-agent" class="wb-input-select" title="选择智能体">
+                        <option value="">选择智能体</option>
+                        {{range .Agents}}
+                        <option value="{{.ID}}" data-model-id="{{.ModelID}}" data-model-mode="{{.ModelMode}}">{{.Title}}{{if .Description}} — {{.Description}}{{end}}</option>
+                        {{end}}
+                    </select>
+                    <select id="wb-sel-model" class="wb-input-select" title="选择模型">
+                        <option value="auto">自动切换</option>
+                        <option value="default">默认模型</option>
+                        {{range .Models}}
+                        <option value="{{.ModelID}}">{{.Name}}</option>
+                        {{end}}
+                    </select>
+                    <span id="wb-conv-tokens" class="wb-token-badge"></span>
+                </div>
+                <div class="wb-input-row">
+                    <textarea id="wb-input" placeholder="请先在左侧选择工作区..." rows="1"></textarea>
+                    <button id="wb-btn-send" class="wb-send-btn" disabled>发送</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧文档面板 -->
+        <div id="wb-docs-panel" class="wb-docs-panel wb-hidden">
+            <div class="wb-resize-handle"></div>
+            <div class="wb-docs-header">
+                <h3>工作区文档 <span id="wb-docs-tokens" class="wb-token-badge"></span></h3>
+                <button id="wb-docs-close" class="wb-docs-close" title="关闭">&times;</button>
+            </div>
+            <div id="wb-docs-list" class="wb-docs-list">
+                <div class="wb-empty" style="padding:2rem 0;">
+                    <span>暂无文档</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧项目文档面板 -->
+        <div id="wb-proj-docs-panel" class="wb-docs-panel wb-hidden">
+            <div class="wb-resize-handle"></div>
+            <div class="wb-docs-header">
+                <h3>项目文档 <span id="wb-proj-docs-tokens" class="wb-token-badge"></span></h3>
+                <button id="wb-proj-docs-close" class="wb-docs-close" title="关闭">&times;</button>
+            </div>
+            <div id="wb-proj-docs-list" class="wb-docs-list">
+                <div class="wb-empty" style="padding:2rem 0;">
+                    <span>暂无文档</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧任务面板 -->
+        <div id="wb-task-panel" class="wb-task-panel wb-hidden">
+            <div class="wb-resize-handle"></div>
+            <div class="wb-task-header">
+                <h3>任务列表</h3>
+                <div class="wb-task-actions">
+                    <button id="wb-task-expand-all" class="wb-task-action-btn" title="展开全部">展开</button>
+                    <button id="wb-task-collapse-all" class="wb-task-action-btn" title="折叠全部">折叠</button>
+                </div>
+                <button id="wb-task-close" class="wb-task-close" title="关闭">&times;</button>
+            </div>
+            <div id="wb-task-stats" class="wb-task-stats"></div>
+            <div id="wb-task-list" class="wb-task-list">
+                <div class="wb-empty" style="padding:2rem 0;">
+                    <span>暂无任务</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧项目文件面板 -->
+        <div id="wb-files-panel" class="wb-docs-panel wb-hidden">
+            <div class="wb-resize-handle"></div>
+            <div class="wb-docs-header">
+                <h3>项目文件</h3>
+                <button id="wb-files-close" class="wb-docs-close" title="关闭">&times;</button>
+            </div>
+            <div id="wb-files-list" class="wb-files-list">
+                <div class="wb-empty" style="padding:2rem 0;"><span>暂无文件</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 文档查看模态框 -->
+<div id="wb-modal-view-doc" class="wb-modal-overlay">
+    <div class="wb-modal wb-doc-modal">
+        <div class="wb-modal-header">
+            <h3 id="wb-doc-modal-title">文档内容</h3>
+            <div class="wb-doc-modal-actions">
+                <button id="wb-doc-edit-btn" class="btn btn-ghost btn-xs">编辑</button>
+                <button id="wb-doc-save-btn" class="btn btn-primary btn-xs wb-hidden">保存</button>
+                <button id="wb-doc-cancel-edit-btn" class="btn btn-ghost btn-xs wb-hidden">取消</button>
+                <button class="wb-modal-close" id="wb-doc-modal-close">&times;</button>
+            </div>
+        </div>
+        <div class="wb-modal-body">
+            <div id="wb-doc-content" class="wb-doc-content"></div>
+            <textarea id="wb-doc-editor" class="wb-doc-editor wb-hidden"></textarea>
+        </div>
+    </div>
+</div>
+
+<!-- 创建工作区模态框 -->
+<div id="wb-modal-create-ws" class="wb-modal-overlay">
+    <div class="wb-modal">
+        <div class="wb-modal-header">
+            <h3>创建工作区</h3>
+            <button class="wb-modal-close" id="wb-modal-close">&times;</button>
+        </div>
+        <div class="wb-modal-body">
+            <div class="form-control">
+                <label class="form-label">名称 <span style="color:var(--color-error);">*</span></label>
+                <input id="ws-name" class="input" type="text" placeholder="英文标识，如 my-workspace" />
+            </div>
+            <div class="form-control">
+                <label class="form-label">描述</label>
+                <input id="ws-desc" class="input" type="text" placeholder="工作区用途描述（可选）" />
+            </div>
+            <div class="form-control">
+                <label class="form-label">关联项目</label>
+                <select id="ws-project" class="select">
+                    <option value="">不关联项目</option>
+                    {{range .Projects}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+        <div class="wb-modal-footer">
+            <button class="btn btn-ghost btn-sm" id="wb-modal-cancel">取消</button>
+            <button class="btn btn-primary btn-sm" id="wb-modal-submit">创建</button>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{.Nonce}}">
+var WB_CONFIG = {
+    workspaceId: {{if .Workspace}}{{.Workspace.ID}}{{else}}0{{end}},
+    agentId: {{if .ConvAgentID}}{{.ConvAgentID}}{{else if .Workspace}}{{.Workspace.AgentID}}{{else}}0{{end}},
+    activeConvId: {{if .ActiveConvID}}{{.ActiveConvID}}{{else}}0{{end}},
+    isRunning: {{if .IsRunning}}true{{else}}false{{end}},
+    lastSeq: {{if .LastSeq}}{{.LastSeq}}{{else}}0{{end}},
+    csrfToken: '{{.CSRFToken}}',
+    defaultModelId: '{{.DefaultModelID}}',
+    agents: [{{range .Agents}}{ id: {{.ID}}, name: '{{.Name}}', title: '{{.Title}}', description: '{{.Description}}', modelId: '{{.ModelID}}' },{{end}}],
+    models: [{{range .Models}}{ id: {{.ID}}, name: '{{.Name}}', modelId: '{{.ModelID}}', protocol: '{{.Protocol}}' },{{end}}],
+    hasProject: {{if .Workspace}}{{if .Workspace.Project.Path}}true{{else}}false{{end}}{{else}}false{{end}}
+};
+</script>
+<script src="/static/js/marked.min.js"></script>
+<script src="/static/js/workbench.js"></script>
+{{end}}

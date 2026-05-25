@@ -1,0 +1,168 @@
+{{define "admin_content"}}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <div class="flex items-center gap-2 text-sm text-muted mb-2">
+            <a href="/admin/projects" class="hover-underline">项目管理</a>
+            <span>/</span>
+            <span>{{.Workspace.Label}}</span>
+            <span>/</span>
+            <span>任务管理</span>
+        </div>
+        <h1 class="text-2xl font-bold">{{.Title}}</h1>
+    </div>
+    <div class="flex gap-2">
+        <button id="btn-plan-task" class="btn btn-primary btn-sm">AI 规划</button>
+    </div>
+</div>
+
+<!-- 统计卡片 -->
+<div class="grid grid-cols-5 gap-4 mb-6" style="display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;">
+    <div style="background:var(--bg-surface);padding:1rem;border-radius:0.5rem;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:700;">{{index .Stats "total"}}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">总任务</div>
+    </div>
+    <div style="background:var(--bg-surface);padding:1rem;border-radius:0.5rem;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--text-secondary);">{{index .Stats "pending"}}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">待处理</div>
+    </div>
+    <div style="background:var(--bg-surface);padding:1rem;border-radius:0.5rem;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--color-primary);">{{index .Stats "running"}}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">进行中</div>
+    </div>
+    <div style="background:var(--bg-surface);padding:1rem;border-radius:0.5rem;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--color-success);">{{index .Stats "completed"}}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">已完成</div>
+    </div>
+    <div style="background:var(--bg-surface);padding:1rem;border-radius:0.5rem;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--color-error);">{{index .Stats "failed"}}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">失败</div>
+    </div>
+</div>
+
+<div class="table-wrapper">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>阶段</th>
+                <th>任务标题</th>
+                <th>优先级</th>
+                <th>执行者</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Tasks}}
+            <tr id="task-row-{{.ID}}">
+                <td>
+                    <span class="badge">{{.Phase}}</span>
+                    {{if .PhaseLabel}}<span style="font-size:0.8rem;color:var(--text-muted);">{{.PhaseLabel}}</span>{{end}}
+                </td>
+                <td>
+                    <div class="font-medium">{{.Title}}</div>
+                    {{if .Description}}<div style="font-size:0.8rem;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Description}}</div>{{end}}
+                </td>
+                <td>
+                    {{if eq .Priority 2}}<span class="badge badge-error">紧急</span>
+                    {{else if eq .Priority 1}}<span class="badge badge-primary">高</span>
+                    {{else}}<span class="badge">普通</span>{{end}}
+                </td>
+                <td>
+                    {{if .AssigneeID}}{{.Assignee.Title}} ({{.Assignee.Name}}){{else}}<span class="text-muted">未分配</span>{{end}}
+                </td>
+                <td>
+                    {{if eq .Status 0}}<span class="badge">待处理</span>
+                    {{else if eq .Status 1}}<span class="badge badge-primary">进行中</span>
+                    {{else if eq .Status 2}}<span class="badge badge-success">已完成</span>
+                    {{else if eq .Status 3}}<span class="badge badge-error">失败</span>
+                    {{else}}<span class="badge">跳过</span>{{end}}
+                </td>
+                <td>
+                    <div class="flex gap-1">
+                        {{if index $.Permissions "project.delete"}}
+                        <button class="btn btn-error btn-xs"
+                            data-delete-url="/admin/tasks/{{.ID}}"
+                            data-target="task-row-{{.ID}}"
+                            data-confirm="确定要删除任务 {{.Title}} 吗？">
+                            删除
+                        </button>
+                        {{end}}
+                    </div>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="text-center opacity-50" style="padding:2rem;">暂无任务数据，点击"AI 规划"自动生成</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if and .Paging (gt .Paging.TotalPage 1)}}
+<div class="pagination">
+    {{if gt .Paging.Page 1}}
+        <a href="?page={{sub .Paging.Page 1}}" class="page-btn">上一页</a>
+    {{end}}
+    {{$currentPage := .Paging.Page}}
+    {{range seq 1 .Paging.TotalPage}}
+        {{if eq . $currentPage}}
+            <span class="page-btn page-btn-active">{{.}}</span>
+        {{else}}
+            <a href="?page={{.}}" class="page-btn">{{.}}</a>
+        {{end}}
+    {{end}}
+    {{if lt .Paging.Page .Paging.TotalPage}}
+        <a href="?page={{add .Paging.Page 1}}" class="page-btn">下一页</a>
+    {{end}}
+</div>
+{{end}}
+
+<script nonce="{{.Nonce}}">
+document.addEventListener('DOMContentLoaded', function() {
+    var btnPlan = document.getElementById('btn-plan-task');
+    if (btnPlan) {
+        btnPlan.addEventListener('click', function() {
+            var requirement = prompt('请输入需求描述，AI 将自动生成分阶段任务计划：');
+            if (!requirement) return;
+
+            btnPlan.disabled = true;
+            btnPlan.textContent = '规划中...';
+
+            var csrfToken = '';
+            var match = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/);
+            if (match) csrfToken = match[1];
+
+            fetch('/admin/tasks/plan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                    'X-Requested-With': 'fetch'
+                },
+                body: JSON.stringify({
+                    workspace_id: {{.Workspace.ID}},
+                    requirement: requirement
+                })
+            })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (data.code === 200) {
+                    alert('已生成 ' + (data.data.count || 0) + ' 个任务');
+                    location.reload();
+                } else {
+                    alert('规划失败: ' + (data.message || '未知错误'));
+                }
+                btnPlan.disabled = false;
+                btnPlan.textContent = 'AI 规划';
+            })
+            .catch(function(err) {
+                alert('请求失败: ' + err.message);
+                btnPlan.disabled = false;
+                btnPlan.textContent = 'AI 规划';
+            });
+        });
+    }
+});
+</script>
+{{end}}

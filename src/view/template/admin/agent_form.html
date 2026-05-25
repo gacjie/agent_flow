@@ -1,0 +1,211 @@
+{{define "admin_content"}}
+<div class="max-w-3xl">
+    <h1 class="text-2xl font-bold mb-6">{{.Title}}</h1>
+
+    <form action="{{.Action}}" method="POST" data-submit-text="提交中...">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        <!-- Tab 导航 -->
+        <div class="tab-nav mb-6">
+            <button type="button" class="tab-nav-btn tab-active" data-tab="basic">基本信息</button>
+            <button type="button" class="tab-nav-btn" data-tab="role">角色定义</button>
+            <button type="button" class="tab-nav-btn" data-tab="rule">规则</button>
+            <button type="button" class="tab-nav-btn" data-tab="workflow">工作流</button>
+            <button type="button" class="tab-nav-btn" data-tab="skill">技能</button>
+            <button type="button" class="tab-nav-btn" data-tab="memory">记忆</button>
+            <button type="button" class="tab-nav-btn" data-tab="tools">工具</button>
+            <button type="button" class="tab-nav-btn" data-tab="advanced">高级</button>
+        </div>
+
+        <!-- 基本信息 Tab -->
+        <div class="tab-pane tab-pane-active" data-tab-content="basic">
+            <div class="form-control">
+                <label class="form-label">名称</label>
+                <input type="text" name="title" value="{{.FormItem.Title}}"
+                       class="input" placeholder="如：Python 开发工程师"
+                       required maxlength="100">
+            </div>
+
+            <div class="form-control">
+                <label class="form-label">标识</label>
+                <input type="text" name="name" value="{{.FormItem.Name}}"
+                       class="input" placeholder="如：python-developer（唯一标识）"
+                       required minlength="2" maxlength="100"
+                       {{if eq .Method "PUT"}}readonly{{end}}>
+            </div>
+
+            <div class="form-control">
+                <label class="form-label">描述</label>
+                <input type="text" name="description" value="{{.FormItem.Description}}"
+                       class="input" placeholder="请输入角色描述" maxlength="1000">
+            </div>
+
+            <div class="form-control">
+                <label class="form-label">关键词</label>
+                <input type="text" name="keywords" value="{{.FormItem.Keywords}}"
+                       class="input" placeholder="逗号分隔" maxlength="500">
+            </div>
+
+            <div class="form-control">
+                <label class="form-label">模型</label>
+                <select name="model_id" class="select">
+                    <option value="auto" {{if eq .FormItem.ModelID "auto"}}selected{{end}}>自动切换</option>
+                    <option value="default" {{if eq .FormItem.ModelID "default"}}selected{{end}}>默认模型</option>
+                    {{range .Models}}
+                    <option value="{{.ModelID}}" {{if eq .ModelID $.FormItem.ModelID}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                </select>
+                <p class="text-sm opacity-60 mt-1">自动切换：报错时按顺序切换到下一个已开启自动切换的模型。默认模型：使用模型管理中设置的默认模型。</p>
+            </div>
+
+            {{if eq .Method "PUT"}}
+            <div class="form-control">
+                <label class="form-label">状态</label>
+                <select name="status" class="select">
+                    <option value="1" {{if eq .FormItem.Status 1}}selected{{end}}>启用</option>
+                    <option value="0" {{if eq .FormItem.Status 0}}selected{{end}}>禁用</option>
+                </select>
+            </div>
+            {{end}}
+        </div>
+
+        <!-- 角色定义 Tab -->
+        <div class="tab-pane" data-tab-content="role">
+            <div class="form-control">
+                <label class="form-label">角色定义（role.md）</label>
+                <textarea name="role_prompt" class="input" rows="20"
+                          placeholder="定义此 AI 智能体的身份、能力和行为准则...">{{index .Content "role"}}</textarea>
+            </div>
+        </div>
+
+        <!-- 规则 Tab -->
+        <div class="tab-pane" data-tab-content="rule">
+            <div class="form-control">
+                <label class="form-label">角色规则（rule.md）</label>
+                <textarea name="rule_content" class="input" rows="20"
+                          placeholder="定义此智能体必须遵循的规则...">{{index .Content "rule"}}</textarea>
+            </div>
+        </div>
+
+        <!-- 工作流 Tab -->
+        <div class="tab-pane" data-tab-content="workflow">
+            <div class="form-control">
+                <label class="form-label">工作流程（workflow.md）</label>
+                <textarea name="workflow_content" class="input" rows="20"
+                          placeholder="定义此智能体的工作流程步骤（编排智能体在此描述多阶段流程和 call_agent 调用）...">{{index .Content "workflow"}}</textarea>
+            </div>
+        </div>
+
+        <!-- 技能 Tab -->
+        <div class="tab-pane" data-tab-content="skill">
+            <div class="form-control">
+                <label class="form-label">关联技能</label>
+                <div class="checkbox-group">
+                    {{range .Skills}}
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="skill_ids" value="{{.ID}}"
+                            {{if index $.SkillIDMap .ID}}checked{{end}}>
+                        <span>{{.Label}}</span>
+                    </label>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="form-control" style="margin-top:1rem;">
+                <label class="form-label">角色速查/人工补充（skill.md）</label>
+                <textarea name="skill_content" class="input" rows="10"
+                          placeholder="该智能体专属速查、经验补充、工具提示...">{{index .Content "skill"}}</textarea>
+            </div>
+        </div>
+
+        <!-- 记忆 Tab -->
+        <div class="tab-pane" data-tab-content="memory">
+            <div class="form-control">
+                <label class="form-label">角色记忆（memory.md）</label>
+                <textarea name="memory_content" class="input" rows="20"
+                          placeholder="智能体的初始记忆内容...">{{index .Content "memory"}}</textarea>
+            </div>
+        </div>
+
+        <!-- 工具 Tab -->
+        <div class="tab-pane" data-tab-content="tools">
+            <div class="form-control">
+                <label class="form-label">系统工具</label>
+                <p class="text-sm opacity-60 mb-2">选择智能体启动时自动加载的系统内置工具</p>
+                <div class="checkbox-group">
+                    {{range .AvailableTools}}{{if not .IsMCP}}
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="auto_load_tools" value="{{.Name}}"
+                            {{if index $.AutoLoadToolsMap .Name}}checked{{end}}>
+                        <span>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}} {{if .Category}}({{.Category}}){{end}}</span>
+                    </label>
+                    {{end}}{{end}}
+                </div>
+            </div>
+            <div class="form-control" style="margin-top:1.5rem;">
+                <label class="form-label">MCP工具</label>
+                <p class="text-sm opacity-60 mb-2">选择智能体启动时自动加载的MCP工具（需在 <a href="/admin/mcp-tools" class="text-primary">MCP管理</a> 中配置并启用后才会显示）</p>
+                <div class="checkbox-group">
+                    {{$hasMCP := false}}
+                    {{range .AvailableTools}}{{if .IsMCP}}{{$hasMCP = true}}
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="auto_load_tools" value="{{.Name}}"
+                            {{if index $.AutoLoadToolsMap .Name}}checked{{end}}>
+                        <span>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}} {{if .Category}}({{.Category}}){{end}}</span>
+                    </label>
+                    {{end}}{{end}}
+                    {{if not $hasMCP}}
+                    <p class="text-sm opacity-40">暂无可用的MCP工具</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        <!-- 高级 Tab -->
+        <div class="tab-pane" data-tab-content="advanced">
+            <div class="form-control">
+                <label class="form-label">自动加载上下文文件</label>
+                <p class="text-sm opacity-60 mb-2">选择角色启动时自动加载的上下文文件类型</p>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="auto_load_files" value="role"
+                            {{if index .AutoLoadFilesMap "role"}}checked{{end}}>
+                        <span>角色设定 (role.md)</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="auto_load_files" value="memory"
+                            {{if index .AutoLoadFilesMap "memory"}}checked{{end}}>
+                        <span>记忆 (memory.md)</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="auto_load_files" value="rule"
+                            {{if index .AutoLoadFilesMap "rule"}}checked{{end}}>
+                        <span>规则 (rule.md)</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="auto_load_files" value="skill"
+                            {{if index .AutoLoadFilesMap "skill"}}checked{{end}}>
+                        <span>角色速查 (skill.md)</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="auto_load_files" value="workflow"
+                            {{if index .AutoLoadFilesMap "workflow"}}checked{{end}}>
+                        <span>工作流程 (workflow.md)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-control">
+                <label class="form-label">图标</label>
+                <input type="text" name="icon" value="{{.FormItem.Icon}}"
+                       class="input" placeholder="图标标识" maxlength="50">
+            </div>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="/admin/agents" class="btn btn-ghost">取消</a>
+        </div>
+    </form>
+</div>
+{{end}}

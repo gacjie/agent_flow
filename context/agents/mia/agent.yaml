@@ -1,0 +1,29 @@
+name: mia
+title: 技术文档工程师
+description: 以代码为唯一事实来源编写技术文档，每个 API 端点和函数都配有可运行示例，确保文档与代码实现精确一致
+keywords: 文档,API文档,技术写作,代码示例,可运行示例,配置参考,使用说明,接口文档,README
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 7
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - write_files
+  - list_files
+  - search_files
+  - web_searches
+  - write_work_docs
+  - delete_work_docs
+  - list_work_docs
+  - read_work_docs
+  - task_lists
+  - task_writers
+  - analysis_files
+  - diagnose_files

@@ -1,0 +1,80 @@
+{{define "admin_content"}}
+<div class="max-w-2xl">
+    <div class="flex items-center gap-2 mb-6">
+        <a href="/admin/mcp-tools" class="btn btn-ghost btn-sm">← 返回</a>
+        <h1 class="text-2xl font-bold">{{.Title}}</h1>
+    </div>
+
+    {{if .Error}}
+    <div class="alert alert-error mb-4">{{.Error}}</div>
+    {{end}}
+
+    <form action="{{.Action}}" method="POST" data-submit-text="提交中...">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+
+        <div class="form-control">
+            <label class="form-label">标识 <span class="text-error">*</span></label>
+            <input type="text" name="name" value="{{.Tool.Name}}"
+                   class="input" placeholder="工具唯一标识，如 my_tool"
+                   required maxlength="100"
+                   {{if .Tool.ID}}readonly{{end}}>
+            <p class="text-xs opacity-60 mt-1">创建后不可修改，供智能体 AutoLoadTools 引用</p>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">名称 <span class="text-error">*</span></label>
+            <input type="text" name="label" value="{{.Tool.Label}}"
+                   class="input" placeholder="工具显示名称"
+                   required maxlength="100">
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">描述</label>
+            <textarea name="description" class="input" rows="2"
+                      placeholder="工具功能描述（提供给 LLM 理解工具用途）" maxlength="500">{{.Tool.Description}}</textarea>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">服务器配置（JSON） <span class="text-error">*</span></label>
+            <textarea name="server_json" class="input font-mono" rows="10"
+                      required placeholder='{
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-xxx"],
+  "env": {"API_KEY": "your-key"}
+}'>{{.ServerJSON}}</textarea>
+            <p class="text-xs opacity-60 mt-1">JSON 格式，包含 command（必填）、args（参数数组）、env（环境变量对象）</p>
+        </div>
+
+        <div class="form-control">
+            <label class="form-label">参数定义（JSON Schema）</label>
+            <textarea name="parameters" class="input font-mono" rows="8"
+                      placeholder='{"type":"object","properties":{"action":{"type":"string","description":"操作类型"}},"required":["action"]}'>{{.Tool.Parameters}}</textarea>
+            <p class="text-xs opacity-60 mt-1">JSON Schema 格式，定义 LLM 调用此工具时的参数结构</p>
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="form-control">
+                <label class="form-label">分类</label>
+                <input type="text" name="category" value="{{.Tool.Category}}"
+                       class="input" placeholder="如：文件操作、网络" maxlength="50">
+            </div>
+            <div class="form-control">
+                <label class="form-label">版本</label>
+                <input type="text" name="version" value="{{.Tool.Version}}"
+                       class="input" placeholder="如：1.0.0" maxlength="50">
+            </div>
+        </div>
+
+        <div class="form-control" style="max-width:160px;">
+            <label class="form-label">超时（秒）</label>
+            <input type="number" name="timeout" value="{{if .Tool.Timeout}}{{.Tool.Timeout}}{{else}}30{{end}}"
+                   class="input" min="1" max="600">
+        </div>
+
+        <div class="flex gap-2 mt-6">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="/admin/mcp-tools" class="btn btn-ghost">取消</a>
+        </div>
+    </form>
+</div>
+{{end}}
