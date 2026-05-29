@@ -197,6 +197,10 @@ func ExecuteAction(sess *Session, a StructuredAction) (interface{}, error) {
 			return nil, err
 		}
 		evalResult = result.Value.Val()
+	case "clear_cache":
+		if err := (proto.NetworkClearBrowserCache{}).Call(sess.Browser); err != nil {
+			return nil, fmt.Errorf("清除浏览器缓存失败: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("不支持的 action: %s", a.Action)
 	}

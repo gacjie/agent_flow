@@ -43,7 +43,7 @@ pagination:
 
 app:
   name: "AgentFlow"
-  version: "1.0.0"
+  version: "1.0.1"
   secret_key: ""               # AES-256 加密密钥（留空则首次启动自动生成）
 
 agent:

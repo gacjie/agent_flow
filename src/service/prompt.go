@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -108,6 +109,26 @@ func (s *PromptService) ensureSystemRule() {
 	slog.Info("已自动生成 context/system.md", "path", path)
 }
 
+func detectRuntimeEnv(name string, candidates []string) (cmd string, version string) {
+	for _, c := range candidates {
+		path, err := exec.LookPath(c)
+		if err != nil {
+			continue
+		}
+		out, err := exec.Command(path, "--version").Output()
+		if err != nil {
+			cmd = c
+			return
+		}
+		ver := strings.TrimSpace(string(out))
+		if lines := strings.SplitN(ver, "\n", 2); len(lines) > 0 {
+			ver = lines[0]
+		}
+		return c, ver
+	}
+	return "", ""
+}
+
 func generateSystemRuleContent() string {
 	cfg := config.Get()
 	appName := cfg.App.Name
@@ -119,6 +140,31 @@ func generateSystemRuleContent() string {
 	sb.WriteString(fmt.Sprintf("- 系统名称: %s 智能体工作流系统\n", appName))
 	sb.WriteString(fmt.Sprintf("- 操作系统: %s/%s\n", runtime.GOOS, runtime.GOARCH))
 	sb.WriteString(fmt.Sprintf("- Go 版本: %s\n", runtime.Version()))
+
+	// 检测 Python 环境
+	if pyCmd, pyVer := detectRuntimeEnv("python", []string{"python3", "python"}); pyCmd != "" {
+		if pyVer != "" {
+			sb.WriteString(fmt.Sprintf("- Python: %s（命令: %s）\n", pyVer, pyCmd))
+		} else {
+			sb.WriteString(fmt.Sprintf("- Python: 已安装（命令: %s）\n", pyCmd))
+		}
+	}
+
+	// 检测 Node.js 环境
+	if nodeCmd, nodeVer := detectRuntimeEnv("node", []string{"node"}); nodeCmd != "" {
+		if nodeVer != "" {
+			sb.WriteString(fmt.Sprintf("- Node.js: %s\n", nodeVer))
+		} else {
+			sb.WriteString("- Node.js: 已安装\n")
+		}
+	}
+	if npmCmd, npmVer := detectRuntimeEnv("npm", []string{"npm"}); npmCmd != "" {
+		if npmVer != "" {
+			sb.WriteString(fmt.Sprintf("- npm: %s\n", npmVer))
+		} else {
+			sb.WriteString("- npm: 已安装\n")
+		}
+	}
 
 	shell := common.GetShell()
 	switch shell.Name {

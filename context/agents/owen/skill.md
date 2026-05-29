@@ -6,7 +6,7 @@
 |---|---|---|
 | 需求 | olivia | `specs/requirement.md` |
 | 规范 | archer | `specs/tech-spec.md`、`AGENTS.md` |
-| 设计 | ethan（分步） | `specs/design.md`、`tasks/design-*` → `tasks/api-contract-*` → `specs/ui-patterns.md`、`tasks/ui-patterns-*` |
+| 设计 | ethan（分步） | `specs/design.md`、`tasks/design-*` → `tasks/api-contract-*` → `specs/ui-patterns.md`、`tasks/ui-patterns-*`（涉及页面呈现时触发，含服务端模板） |
 | 任务 | noah | 任务树 |
 | 开发 | gavin/lucas/emma | 代码变更 + 任务状态（一个 phase 一次 call_agent） |
 | 测试 | liam | `tasks/test-report-*` + `tasks/test-report-e2e-*`（有前端时必须） |

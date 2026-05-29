@@ -22,22 +22,33 @@
 **第一步：系统设计**
 调用 `ethan` 输出：
 - `specs/design.md`：设计摘要、文件结构、模块职责、接口索引、关键决策。
-- `tasks/design-{scope}.md`：模块详细设计。
+- `tasks/design-{scope}.md`：模块详细设计。scope 必须按功能模块拆分（如 design-user.md、design-permission.md、design-role.md），不得按"应用"或"层"合并（如 design-admin.md 包含所有模块）。基础设施和公共代码可合并为一个 scope（如 design-infrastructure.md 或 design-common.md）。
+
+指令中明确要求 ethan：每个独立功能模块必须各自输出一个 `tasks/design-{module}.md`，基础设施和公共代码可合为一个。
 
 **第二步：接口契约**（需要前后端交互时）
 调用 `ethan` 输出：
-- `tasks/api-contract-{scope}.md`：完整接口契约。
+- `tasks/api-contract-{scope}.md`：完整接口契约。scope 与 design 的模块拆分对齐（如 api-contract-user.md、api-contract-permission.md）。
 
-**第三步：前端风格约定**（涉及前端时）
+**第三步：前端风格约定**（涉及页面呈现时——含 SPA 前端或服务端模板）
 调用 `ethan` 输出：
-- `specs/ui-patterns.md`：全局前端风格纯规则约定——风格基调、CSS 变量约定、间距节奏、配色逻辑、字体层级、主题方式（不含代码片段）。
-- `tasks/ui-patterns-{scope}.md`：按模块输出关键组件的具体 HTML/CSS 代码片段，体现用户要求的视觉风格。scope 与 design-{scope} 对齐。
+- `specs/ui-patterns.md`：全局风格与布局规则约定——风格基调、CSS 变量约定、间距节奏、配色逻辑、字体层级、主题方式；服务端模板项目还须包含：基础模板继承结构（哪些 block 可覆盖）、全局布局骨架（header/sidebar/footer 的语义结构与职责）、新页面接入方式（继承哪个模板、填充哪些 block）。不含具体代码片段。
+- `tasks/ui-patterns-{scope}.md`：按功能模块输出关键组件的具体 HTML/CSS 代码片段。scope 与 design-{scope} 的模块拆分对齐（如 ui-patterns-user.md、ui-patterns-permission.md）。公共布局和通用组件合为 `ui-patterns-common.md`（服务端模板项目中必须包含：基础模板完整代码、全局 header/sidebar/footer HTML 结构、标准内容页骨架示例）。
 
-检查摘要文档结构和 `tasks/` 详情文档是否存在。有前端任务时额外确认：`specs/ui-patterns.md` 存在且包含风格基调和 CSS 变量约定；至少一个 `tasks/ui-patterns-{scope}.md` 存在且包含具体 HTML/CSS 代码片段。
+检查摘要文档结构和 `tasks/` 详情文档是否存在。涉及页面呈现时额外确认：`specs/ui-patterns.md` 存在且包含风格基调和 CSS 变量约定；服务端模板项目还须包含基础模板继承结构和全局布局骨架描述；至少一个 `tasks/ui-patterns-{scope}.md` 存在且包含具体 HTML/CSS 代码片段；服务端模板项目须确认 `tasks/ui-patterns-common.md` 包含基础模板代码和全局导航结构。验证 `tasks/design-*.md` 的数量与需求中的功能模块数量匹配（每个功能模块至少一个 design 文件）；若发现多模块合并为一个 design 文件，要求 ethan 重新拆分。
 
 ## 4. 任务规划
 
-调用 `noah` 创建任务树。要求它使用 `task_writers` 创建阶段父任务和叶子任务，并用 `task_lists()` 自检。编排师再抽查任务标签、父子结构、`task_doc` 关联和可执行粒度。
+调用 `noah` 创建任务树。指令中必须包含以下要求：
+- 使用 `task_writers` 创建阶段父任务和叶子任务，并用 `task_lists()` 自检。
+- 每个 `tasks/design-{scope}.md` 对应的后端和前端必须各自独立成 phase，禁止将多模块合并到同一 phase。
+- 基础设施和公共代码必须独立成 phase 并排在模块 phase 之前。
+- 每个 phase 的 `phase_label` 必须包含具体模块名称。
+
+编排师验收任务树时抽查：
+1. 任务标签、父子结构、`task_doc` 关联和可执行粒度。
+2. 多模块项目中是否每个模块独立成 phase（若发现多模块合并为一个 phase，要求 noah 重新拆分）。
+3. 基础设施/公共层 phase 是否排在模块 phase 之前。
 
 ## 5. 开发实施
 
@@ -49,7 +60,9 @@
 > 正例：phase 含 3 个 [Backend:Go] 叶子任务 → 一次 `call_agent(gavin)`，指令：`读取 task_lists(task_id=5, verbose=true) 获取 phase-1 全部任务详情，逐个完成 3 个叶子任务并更新状态。`
 > 反例：同一 phase 的 3 个叶子任务 → 调用 gavin 3 次，每次只给 1 个任务。（浪费会话、丢失上下文连贯性）
 4. 前端任务指令中额外要求 emma 先读取当前模块对应的 `tasks/ui-patterns-{scope}.md`（scope 根据当前 phase 的模块确定），以其中的代码模式为基准扩展页面。
-5. 编排师确认当前 phase 全部完成后，更新阶段父任务状态。
+5. 后端 phase 含页面或模板任务时，指令中额外要求后端专家先读取 `tasks/ui-patterns-common.md` 获取基础模板和全局布局结构，再读取当前模块对应的 `tasks/ui-patterns-{scope}.md`，以其中的代码模式为基准实现页面模板，确保全局布局（header/sidebar/footer/nav）与基础模板一致。
+6. 后端 phase 的 `call_agent` 指令中必须包含"完成全部任务后启动应用确认无报错"的明确要求。
+7. 编排师确认当前 phase 全部完成后，更新阶段父任务状态。若专家报告启动失败，不更新状态，创建修复任务。
 
 无开发 phase 后进入测试。
 

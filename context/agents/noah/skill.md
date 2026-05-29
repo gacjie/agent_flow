@@ -16,7 +16,8 @@
 
 ## task_doc 关联
 
-- 模型、服务、页面：优先关联 `tasks/design-{module}.md`。
+- 模型、服务：优先关联 `tasks/design-{module}.md`。
+- 页面、模板：优先关联 `tasks/ui-patterns-{module}.md`（若存在），否则关联 `tasks/design-{module}.md`。
 - API 前后端任务和接口测试：优先关联 `tasks/api-contract-{module}.md`。
 - 修复任务：关联对应测试报告或审查报告。
 

@@ -20,6 +20,7 @@ func (t *BrowserActionTool) Description() string {
 - type: 在指定输入框中输入文本，支持 CSS 选择器或 REF:rN 引用
 - scroll: 滚动页面
 - evaluate: 在页面上下文中执行 JavaScript 代码并返回结果（不支持 import/export 等 ES module 语法，请使用普通函数和 var/const/let）
+- clear_cache: 清除浏览器 HTTP 缓存（保留 cookies/登录状态），下次 navigate 将获取最新资源
 工具默认只输出对 AI 决策有用的必要事实，不输出整页源码，不替调用方判断"业务成功/失败"。
 可通过 output_expands 扩展输出内容，支持一次传多个值，例如 console / network / page_source。
 批量模式：使用 actions 数组可一次调用顺序执行多个交互操作（navigate/type/click/scroll/evaluate），返回按步骤组织的结构化 JSON。`
@@ -31,7 +32,7 @@ func (t *BrowserActionTool) Parameters() json.RawMessage {
 		"properties": {
 			"action": {
 				"type": "string",
-				"enum": ["navigate", "screenshot", "click", "type", "scroll", "evaluate"],
+				"enum": ["navigate", "screenshot", "click", "type", "scroll", "evaluate", "clear_cache"],
 				"description": "操作类型（单步模式）"
 			},
 			"actions": {
@@ -39,7 +40,7 @@ func (t *BrowserActionTool) Parameters() json.RawMessage {
 				"items": {
 					"type": "object",
 					"properties": {
-						"action": {"type": "string", "enum": ["navigate", "type", "click", "scroll", "evaluate"], "description": "操作类型"},
+						"action": {"type": "string", "enum": ["navigate", "type", "click", "scroll", "evaluate", "clear_cache"], "description": "操作类型"},
 						"url": {"type": "string", "description": "页面地址（navigate 时必填）"},
 						"selector": {"type": "string", "description": "CSS 选择器，或来自最近结构化输出的 REF:rN 引用"},
 						"text": {"type": "string", "description": "输入文本（type 时必填）"},
@@ -109,13 +110,13 @@ func (t *BrowserActionTool) Execute(ctx context.Context, args string) *Result {
 	}
 
 	switch p.Action {
-	case "navigate", "click", "type", "scroll", "evaluate":
+	case "navigate", "click", "type", "scroll", "evaluate", "clear_cache":
 		content, isErr := browsers.ExecuteStructured(sessionKey, &p, workspaceDir)
 		return &Result{Content: content, IsError: isErr}
 	case "screenshot":
 		content, isErr := browsers.DoScreenshot(sessionKey, workspaceDir)
 		return &Result{Content: content, IsError: isErr}
 	default:
-		return ErrorResult("未知 action: " + p.Action + "（支持: navigate/screenshot/click/type/scroll/evaluate）")
+		return ErrorResult("未知 action: " + p.Action + "（支持: navigate/screenshot/click/type/scroll/evaluate/clear_cache）")
 	}
 }
