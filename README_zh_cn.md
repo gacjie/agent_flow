@@ -2,6 +2,10 @@
 
 [English](README.md)
 
+[![QQ群](https://img.shields.io/badge/QQ群-311977510-blue?logo=tencentqq)](https://qm.qq.com/q/83vcaA7Ady)
+
+**交流群**：[AgentFlow交流群](https://qm.qq.com/q/83vcaA7Ady)（QQ群号：311977510）
+
 开箱即用的 AI 智能体工作流系统。基于 Go 语言构建，单二进制部署，内嵌前端界面和 SQLite 数据库。
 
 ## 特性
