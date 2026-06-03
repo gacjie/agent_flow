@@ -48,8 +48,8 @@ func (c *AdminDashboard) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// 最近项目（前 5）
 	recentProjects, _, _ := c.ProjectService.List(1, 5)
 
-	// 默认模型
-	defaultModel, _ := c.ModelService.GetDefault()
+	// auto 模型数量
+	autoModels, _ := c.ModelService.GetAutoModels()
 
 	data := map[string]interface{}{
 		"Title":      "管理面板",
@@ -73,7 +73,7 @@ func (c *AdminDashboard) Dashboard(w http.ResponseWriter, r *http.Request) {
 		"ActiveWorkspaces": activeWorkspaces,
 		"RecentProjects":   recentProjects,
 		// 系统信息
-		"DefaultModel": defaultModel,
+		"AutoModelCount": len(autoModels),
 	}
 	c.Render(w, r, "admin/dashboard", data)
 }

@@ -13,7 +13,7 @@
             {{else}}
             <input type="text" class="input" name="model_id" value="{{.FormModel.ModelID}}"
                    placeholder="如：gpt-4o、claude-3-5-sonnet" required>
-            <p class="text-sm opacity-60 mt-1">系统内唯一标识，创建后不可修改</p>
+            <p class="text-sm opacity-60 mt-1">模型路由标识，相同 model_id 的多条记录将参与负载均衡，创建后不可修改</p>
             {{end}}
         </div>
 
@@ -48,11 +48,14 @@
             <input type="password" class="input" name="api_key" placeholder="上游接口密钥" required>
             {{end}}
         </div>
-
+<!-- PLACEHOLDER_PART2 -->
         <div class="form-control">
             <label class="form-label">上游模型 ID (api_model_id)</label>
-            <input type="text" class="input" name="api_model_id" value="{{.FormModel.APIModelID}}"
-                   placeholder="如：gpt-4o、claude-opus-4-6" required>
+            <div class="flex gap-2 items-center">
+                <input type="text" class="input" name="api_model_id" value="{{.FormModel.APIModelID}}"
+                       placeholder="如：gpt-4o、claude-opus-4-6" required style="flex:1">
+                <button type="button" id="btn-fetch-models" class="btn btn-primary btn-sm" style="white-space:nowrap">获取模型</button>
+            </div>
             <p class="text-sm opacity-60 mt-1">调用上游 API 时实际传递的模型名称</p>
         </div>
 
@@ -91,10 +94,165 @@
             </label>
         </div>
 
+        <div class="form-control">
+            <label class="form-label">模型能力</label>
+            <div class="flex gap-4">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="cap_vision" value="1"
+                           {{if .HasVision}}checked{{end}}>
+                    <span>视觉（支持图片/视觉输入）</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="cap_image_gen" value="1"
+                           {{if .HasImageGen}}checked{{end}}>
+                    <span>生图（支持图片生成）</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="cap_tools" value="1"
+                           {{if .HasTools}}checked{{end}}>
+                    <span>工具（支持工具调用）</span>
+                </label>
+            </div>
+            <p class="text-sm opacity-60 mt-1">新建模型时"工具"默认勾选</p>
+        </div>
+
         <div class="flex gap-3 pt-4">
             <button type="submit" class="btn btn-primary">保存</button>
             <a href="/admin/models" class="btn btn-ghost">取消</a>
         </div>
     </form>
 </div>
+<!-- PLACEHOLDER_MODAL -->
+<div id="model-picker-modal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 class="text-lg font-bold">选择上游模型</h3>
+            <button type="button" id="modal-close" class="btn btn-ghost btn-sm">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="model-picker-loading" class="text-center" style="padding:2rem">加载中...</div>
+            <div id="model-picker-error" class="text-center" style="padding:2rem;color:var(--color-error);display:none"></div>
+            <div class="table-wrapper" id="model-picker-table-wrap" style="display:none;max-height:400px;overflow-y:auto">
+                <table class="table">
+                    <thead>
+                        <tr><th>模型 ID</th><th>名称</th><th>输入</th><th>输出</th><th>能力</th><th></th></tr>
+                    </thead>
+                    <tbody id="model-picker-list"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{.Nonce}}">
+(function() {
+    var modelID = {{.FormModel.ID}};
+    var fetchBtn = document.getElementById('btn-fetch-models');
+    var modal = document.getElementById('model-picker-modal');
+    var closeBtn = document.getElementById('modal-close');
+    var loading = document.getElementById('model-picker-loading');
+    var errorDiv = document.getElementById('model-picker-error');
+    var tableWrap = document.getElementById('model-picker-table-wrap');
+    var listBody = document.getElementById('model-picker-list');
+
+    function getCsrf() {
+        var m = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function showModal() { modal.style.display = 'flex'; }
+    function hideModal() { modal.style.display = 'none'; }
+
+    closeBtn.addEventListener('click', hideModal);
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) hideModal();
+    });
+
+    fetchBtn.addEventListener('click', function() {
+        var baseUrl = document.querySelector('[name="base_url"]').value.trim();
+        var protocol = document.querySelector('[name="protocol"]').value;
+        var apiKey = document.querySelector('[name="api_key"]').value.trim();
+
+        if (!baseUrl || !protocol) {
+            alert('请先填写上游地址和协议');
+            return;
+        }
+        if (modelID === 0 && !apiKey) {
+            alert('请先填写 API Key');
+            return;
+        }
+
+        showModal();
+        loading.style.display = '';
+        errorDiv.style.display = 'none';
+        tableWrap.style.display = 'none';
+        listBody.innerHTML = '';
+
+        var url, opts;
+        if (modelID > 0) {
+            url = '/admin/models/' + modelID + '/fetch-upstream';
+            opts = { method: 'POST', headers: {'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json'}, body: '{}' };
+        } else {
+            url = '/admin/models/fetch-upstream';
+            opts = { method: 'POST', headers: {'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json'},
+                     body: JSON.stringify({base_url: baseUrl, api_key: apiKey, protocol: protocol}) };
+        }
+
+        fetch(url, opts)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            loading.style.display = 'none';
+            if (data.code !== 0) {
+                errorDiv.textContent = data.message || '获取失败';
+                errorDiv.style.display = '';
+                return;
+            }
+            var models = data.data || [];
+            if (models.length === 0) {
+                errorDiv.textContent = '未获取到任何模型';
+                errorDiv.style.display = '';
+                return;
+            }
+            tableWrap.style.display = '';
+            models.forEach(function(m) {
+                var tr = document.createElement('tr');
+                tr.innerHTML = '<td><code class="text-sm">' + escHtml(m.id) + '</code></td>'
+                    + '<td>' + escHtml(m.name) + '</td>'
+                    + '<td>' + m.max_input_tokens + '</td>'
+                    + '<td>' + m.max_output_tokens + '</td>'
+                    + '<td>' + escHtml(m.capabilities || 'tools') + '</td>'
+                    + '<td><button type="button" class="btn btn-sm btn-primary pick-model-btn">选择</button></td>';
+                tr.querySelector('.pick-model-btn').addEventListener('click', function() {
+                    fillForm(m);
+                    hideModal();
+                });
+                listBody.appendChild(tr);
+            });
+        })
+        .catch(function(err) {
+            loading.style.display = 'none';
+            errorDiv.textContent = '请求失败: ' + err;
+            errorDiv.style.display = '';
+        });
+    });
+
+    function fillForm(m) {
+        document.querySelector('[name="api_model_id"]').value = m.id;
+        var nameInput = document.querySelector('[name="name"]');
+        if (!nameInput.value) nameInput.value = m.name || m.id;
+        document.querySelector('[name="max_input_tokens"]').value = m.max_input_tokens || 128000;
+        document.querySelector('[name="max_output_tokens"]').value = m.max_output_tokens || 4096;
+        var caps = (m.capabilities || 'tools').split(',');
+        document.querySelector('[name="cap_vision"]').checked = caps.indexOf('vision') >= 0;
+        document.querySelector('[name="cap_image_gen"]').checked = caps.indexOf('image_gen') >= 0;
+        document.querySelector('[name="cap_tools"]').checked = caps.indexOf('tools') >= 0;
+    }
+
+    function escHtml(s) {
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+}());
+</script>
 {{end}}

@@ -24,8 +24,16 @@ type Tool interface {
 
 // Result 工具执行结果
 type Result struct {
-	Content string `json:"content"`          // 返回内容
-	IsError bool   `json:"is_error,omitempty"` // 是否为错误
+	Content string      `json:"content"`            // 返回内容
+	IsError bool        `json:"is_error,omitempty"` // 是否为错误
+	Images  []ImageData `json:"images,omitempty"`   // 图片附件（由 ChatRunner 统一处理视觉逻辑）
+}
+
+// ImageData 工具产出的图片数据
+type ImageData struct {
+	Path      string `json:"path"`       // 文件路径（相对于工作区）
+	MediaType string `json:"media_type"` // MIME 类型（image/png, image/jpeg 等）
+	Data      string `json:"data"`       // base64 编码数据（可选，为空时从 Path 读取）
 }
 
 // ErrorResult 创建错误结果

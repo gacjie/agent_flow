@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"agent_flow/src/common"
 )
 
 // ClaudeClient Anthropic Claude API 客户端
@@ -310,8 +312,32 @@ func (c *ClaudeClient) buildRequest(messages []Message, opts ChatOptions) ([]byt
 		default:
 			flushTools()
 			cm := claudeMessage{Role: m.Role}
-			data, _ := json.Marshal(m.Content)
-			cm.Content = data
+			// 多模态内容：ContentParts 非空时构建内容块数组
+			if len(m.ContentParts) > 0 {
+				var blocks []map[string]interface{}
+				for _, p := range m.ContentParts {
+					switch p.Type {
+					case "image":
+						blocks = append(blocks, map[string]interface{}{
+							"type": "image",
+							"source": map[string]string{
+								"type":       "base64",
+								"media_type": p.MediaType,
+								"data":       p.Data,
+							},
+						})
+					default:
+						blocks = append(blocks, map[string]interface{}{
+							"type": "text",
+							"text": p.Text,
+						})
+					}
+				}
+				cm.Content, _ = json.Marshal(blocks)
+			} else {
+				data, _ := json.Marshal(m.Content)
+				cm.Content = data
+			}
 			req.Messages = append(req.Messages, cm)
 		}
 	}
@@ -361,7 +387,7 @@ func (c *ClaudeClient) buildRequest(messages []Message, opts ChatOptions) ([]byt
 }
 
 func (c *ClaudeClient) doRequest(ctx context.Context, body []byte) (*http.Response, error) {
-	url := strings.TrimRight(c.cfg.BaseURL, "/") + "/v1/messages"
+	url := common.BuildAPIURL(c.cfg.BaseURL, "/v1/messages")
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {

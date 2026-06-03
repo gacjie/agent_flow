@@ -43,11 +43,27 @@ func (e *Executor) Execute(ctx context.Context, calls []provider.ToolCall) []pro
 				content = "[错误] " + content
 			}
 
-			results[idx] = provider.Message{
+			msg := provider.Message{
 				Role:       "tool",
 				Content:    content,
 				ToolCallID: tc.ID,
 			}
+
+			// 工具返回图片时，构建 ContentParts（由 ChatRunner 层统一处理视觉逻辑）
+			if len(result.Images) > 0 {
+				parts := []provider.ContentPart{{Type: "text", Text: content}}
+				for _, img := range result.Images {
+					parts = append(parts, provider.ContentPart{
+						Type:      "image",
+						MediaType: img.MediaType,
+						Data:      img.Data,
+						Path:      img.Path,
+					})
+				}
+				msg.ContentParts = parts
+			}
+
+			results[idx] = msg
 		}(i, call)
 	}
 

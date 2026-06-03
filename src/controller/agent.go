@@ -315,14 +315,12 @@ func marshalCheckboxValues(values []string) string {
 }
 
 // parseModelSelection 解析模型选择表单值
-// 表单 value 为 "auto"/"default"/model_id字符串
+// 表单 value 为 "auto"/model_id字符串
 // 返回 (modelMode, modelID)
 func parseModelSelection(val string) (string, string) {
 	switch val {
-	case "auto":
+	case "auto", "default", "":
 		return "auto", "auto"
-	case "default":
-		return "default", "default"
 	default:
 		return "", val
 	}

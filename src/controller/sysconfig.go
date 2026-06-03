@@ -12,6 +12,7 @@ import (
 type SysConfigCtrl struct {
 	Base
 	ConfigService *service.SysConfigService
+	ModelService  *service.LLMModelService
 }
 
 // Edit 系统配置页面
@@ -28,6 +29,16 @@ func (c *SysConfigCtrl) Edit(w http.ResponseWriter, r *http.Request) {
 		"AdminPage":  true,
 		"ActiveMenu": "config",
 	}
+
+	if c.ModelService != nil {
+		models, _ := c.ModelService.ListAll()
+		data["Models"] = models
+		visionModels, _ := c.ModelService.ListByCapability("vision")
+		data["VisionModels"] = visionModels
+		imageGenModels, _ := c.ModelService.ListByCapability("image_gen")
+		data["ImageGenModels"] = imageGenModels
+	}
+
 	c.Render(w, r, "admin/config", data)
 }
 

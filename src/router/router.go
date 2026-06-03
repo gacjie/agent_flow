@@ -29,6 +29,7 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 	adminService := service.NewAdminService(db)
 	captchaService := service.NewCaptchaService()
 	modelService := service.NewLLMProviderService(db)
+	modelService.SysConfigService = configService
 	skillService := service.NewSkillService(db, fileSyncService)
 	agentService := service.NewAgentService(db, fileSyncService)
 	projectService := service.NewProjectService(db)
@@ -54,11 +55,22 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 	promptService := service.NewPromptService()
 	chatRunner.PromptService = promptService
 	tidyUpService.PromptService = promptService
+	// 视觉代理服务
+	visionService := service.NewVisionService(modelService, configService)
+	visionService.PromptService = promptService
+	chatRunner.VisionService = visionService
+	// 提示词增强服务
+	promptEnhanceService := service.NewPromptEnhanceService(modelService, configService, promptService)
 
 	// 注册 Agent 管理工具（供智能体通过 tool_call 调用）
 	tool.RegisterAgentTools(toolRegistry, agentService, chatRunner)
 	// 注册任务管理工具（供智能体通过 tool_call 操作工作区任务）
 	tool.RegisterTaskTools(toolRegistry, taskService)
+	// 注册图片生成工具（需要 ModelGetter + ConfigGetter 依赖）
+	toolRegistry.Register(&tool.ImageGenTool{
+		ConfigGetter: configService,
+		ModelGetter:  modelService,
+	})
 
 	// 静态文件服务
 	staticFS, _ := fs.Sub(view.StaticFS, "static")
@@ -81,7 +93,7 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 	}
 	memberCtrl := &controller.Member{Base: base, Service: adminService, PermService: permService}
 	roleCtrl := &controller.RoleCtrl{Base: base, PermService: permService}
-	configCtrl := &controller.SysConfigCtrl{Base: base, ConfigService: configService}
+	configCtrl := &controller.SysConfigCtrl{Base: base, ConfigService: configService, ModelService: modelService}
 	providerCtrl := &controller.LLMProviderCtrl{Base: base, Service: modelService}
 	skillCtrl := &controller.SkillCtrl{Base: base, Service: skillService}
 	toolCtrl := &controller.SystemToolCtrl{Base: base, ToolService: toolService}
@@ -92,15 +104,16 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 	workspaceCtrl := &controller.WorkspaceCtrl{Base: base, Service: workspaceService, ProjectService: projectService, AgentService: agentService}
 	taskCtrl := &controller.TaskCtrl{Base: base, TaskService: taskService, WorkspaceService: workspaceService}
 	workbenchCtrl := &controller.WorkbenchCtrl{
-		Base:             base,
-		ChatService:      chatService,
-		ChatRunner:       chatRunner,
-		WorkspaceService: workspaceService,
-		AgentService:     agentService,
-		ProjectService:   projectService,
-		ModelService:     modelService,
-		RunnerManager:    runnerMgr,
-		TaskService:      taskService,
+		Base:                 base,
+		ChatService:          chatService,
+		ChatRunner:           chatRunner,
+		WorkspaceService:     workspaceService,
+		AgentService:         agentService,
+		ProjectService:       projectService,
+		ModelService:         modelService,
+		RunnerManager:        runnerMgr,
+		TaskService:          taskService,
+		PromptEnhanceService: promptEnhanceService,
 	}
 
 	// ========== Web 页面路由 ==========
@@ -155,12 +168,13 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 					r.With(middleware.RequirePermission("model.create")).Post("/", providerCtrl.Create)
 					r.With(middleware.RequirePermission("model.view")).Post("/export", providerCtrl.Export)
 					r.With(middleware.RequirePermission("model.create")).Post("/import", providerCtrl.Import)
+					r.With(middleware.RequirePermission("model.create")).Post("/fetch-upstream", providerCtrl.FetchModels)
 					r.With(middleware.RequirePermission("model.edit")).Get("/{id}/edit", providerCtrl.EditForm)
 					r.With(middleware.RequirePermission("model.edit")).Post("/{id}", providerCtrl.Update)
 					r.With(middleware.RequirePermission("model.delete")).Delete("/{id}", providerCtrl.Delete)
-					r.With(middleware.RequirePermission("model.edit")).Post("/{id}/default", providerCtrl.SetDefault)
 					r.With(middleware.RequirePermission("model.edit")).Post("/{id}/toggle-auto", providerCtrl.ToggleAuto)
 					r.With(middleware.RequirePermission("model.view")).Get("/{id}/test", providerCtrl.TestConnect)
+					r.With(middleware.RequirePermission("model.edit")).Post("/{id}/fetch-upstream", providerCtrl.FetchModels)
 				})
 
 				r.Route("/skills", func(r chi.Router) {
@@ -251,6 +265,11 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 					r.With(middleware.RequirePermission("workbench.create")).Post("/docs/save", workbenchCtrl.SaveDoc)
 					r.With(middleware.RequirePermission("workbench.create")).Post("/project-docs/save", workbenchCtrl.SaveProjectDoc)
 					r.With(middleware.RequirePermission("workbench.create")).Post("/project-files/save", workbenchCtrl.SaveProjectFile)
+					r.With(middleware.RequirePermission("workbench.create")).Post("/upload", workbenchCtrl.UploadFile)
+					r.With(middleware.RequirePermission("workbench.view")).Get("/uploads", workbenchCtrl.ServeUpload)
+					r.With(middleware.RequirePermission("workbench.view")).Get("/uploads/list", workbenchCtrl.ListUploads)
+					r.With(middleware.RequirePermission("workbench.create")).Post("/uploads/save", workbenchCtrl.SaveUpload)
+					r.With(middleware.RequirePermission("workbench.create")).Post("/enhance-prompt", workbenchCtrl.EnhancePrompt)
 				})
 			})
 		})

@@ -42,7 +42,6 @@
                 <td><input type="checkbox" class="model-check" value="{{.ID}}"></td>
                 <td>
                     <code class="text-sm">{{.ModelID}}</code>
-                    {{if .IsDefault}}<span class="badge badge-success" style="margin-left:.25rem">默认</span>{{end}}
                 </td>
                 <td>{{.Name}}</td>
                 <td>
@@ -73,11 +72,6 @@
                 <td>
                     <div class="btn-group">
                         {{if index $.Permissions "model.edit"}}
-                        <button class="btn btn-sm {{if .IsDefault}}btn-primary{{else}}btn-ghost{{end}}"
-                                data-set-default="{{.ID}}"
-                                {{if .IsDefault}}disabled title="当前默认模型"{{end}}>
-                            默认
-                        </button>
                         <a href="/admin/models/{{.ID}}/edit" class="btn btn-sm btn-ghost">编辑</a>
                         {{end}}
                         {{if index $.Permissions "model.view"}}
@@ -138,51 +132,6 @@
                     btn.classList.toggle('btn-primary', on);
                     btn.classList.toggle('btn-ghost', !on);
                     btn.title = on ? '已开启，点击关闭' : '已关闭，点击开启';
-                } else {
-                    alert(data.message || '操作失败');
-                }
-            })
-            .catch(function () { alert('请求失败'); });
-        });
-    });
-
-    // 设为默认模型
-    document.querySelectorAll('[data-set-default]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            if (btn.disabled) return;
-            var id = btn.getAttribute('data-set-default');
-            fetch('/admin/models/' + id + '/default', {
-                method: 'POST',
-                headers: { 'X-CSRF-Token': getCsrf(), 'Content-Type': 'application/json' }
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (data.code === 0) {
-                    // 重置所有默认按钮
-                    document.querySelectorAll('[data-set-default]').forEach(function (b) {
-                        b.classList.remove('btn-primary');
-                        b.classList.add('btn-ghost');
-                        b.disabled = false;
-                        b.title = '';
-                        b.textContent = '默认';
-                    });
-                    btn.classList.remove('btn-ghost');
-                    btn.classList.add('btn-primary');
-                    btn.disabled = true;
-                    btn.title = '当前默认模型';
-                    // 刷新"默认"徽章
-                    document.querySelectorAll('.badge-success').forEach(function (el) {
-                        if (el.textContent.trim() === '默认') el.remove();
-                    });
-                    var row = btn.closest('tr');
-                    var codeEl = row.querySelector('td:first-child code');
-                    if (codeEl) {
-                        var badge = document.createElement('span');
-                        badge.className = 'badge badge-success';
-                        badge.style.marginLeft = '0.25rem';
-                        badge.textContent = '默认';
-                        codeEl.after(badge);
-                    }
                 } else {
                     alert(data.message || '操作失败');
                 }

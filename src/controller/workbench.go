@@ -12,14 +12,15 @@ import (
 // WorkbenchCtrl 工作台控制器
 type WorkbenchCtrl struct {
 	Base
-	ChatService      *service.ChatService
-	ChatRunner       *service.ChatRunner
-	WorkspaceService *service.WorkspaceService
-	AgentService     *service.AgentService
-	ProjectService   *service.ProjectService
-	ModelService     *service.LLMModelService
-	RunnerManager    *service.RunnerManager
-	TaskService      *service.TaskService
+	ChatService          *service.ChatService
+	ChatRunner           *service.ChatRunner
+	WorkspaceService     *service.WorkspaceService
+	AgentService         *service.AgentService
+	ProjectService       *service.ProjectService
+	ModelService         *service.LLMModelService
+	RunnerManager        *service.RunnerManager
+	TaskService          *service.TaskService
+	PromptEnhanceService *service.PromptEnhanceService
 }
 
 // Page 工作台主页面
@@ -32,22 +33,13 @@ func (c *WorkbenchCtrl) Page(w http.ResponseWriter, r *http.Request) {
 	projects, _ := c.ProjectService.ListAll()
 	models, _ := c.ModelService.ListAll()
 
-	defaultModelID := ""
-	for _, m := range models {
-		if m.IsDefault {
-			defaultModelID = m.ModelID
-			break
-		}
-	}
-
 	data := map[string]interface{}{
-		"Title":          "工作台",
-		"ActiveMenu":     "workbench",
-		"Workspaces":     workspaces,
-		"Agents":         agents,
-		"Projects":       projects,
-		"Models":         models,
-		"DefaultModelID": defaultModelID,
+		"Title":      "工作台",
+		"ActiveMenu": "workbench",
+		"Workspaces": workspaces,
+		"Agents":     agents,
+		"Projects":   projects,
+		"Models":     models,
 	}
 
 	if workspaceID > 0 {

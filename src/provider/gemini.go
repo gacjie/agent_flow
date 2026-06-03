@@ -57,8 +57,14 @@ type geminiContent struct {
 
 type geminiPart struct {
 	Text             string              `json:"text,omitempty"`
+	InlineData       *geminiInlineData   `json:"inlineData,omitempty"`
 	FunctionCall     *geminiFunctionCall `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFuncResponse `json:"functionResponse,omitempty"`
+}
+
+type geminiInlineData struct {
+	MimeType string `json:"mimeType"`
+	Data     string `json:"data"`
 }
 
 type geminiFunctionCall struct {
@@ -245,9 +251,25 @@ func (c *GeminiClient) buildRequest(messages []Message, opts ChatOptions) ([]byt
 			}
 		default:
 			flushFuncParts()
-			req.Contents = append(req.Contents, geminiContent{
-				Role: "user", Parts: []geminiPart{{Text: m.Content}},
-			})
+			// 多模态内容：ContentParts 非空时构建多 part
+			if len(m.ContentParts) > 0 {
+				var parts []geminiPart
+				for _, p := range m.ContentParts {
+					switch p.Type {
+					case "image":
+						parts = append(parts, geminiPart{
+							InlineData: &geminiInlineData{MimeType: p.MediaType, Data: p.Data},
+						})
+					default:
+						parts = append(parts, geminiPart{Text: p.Text})
+					}
+				}
+				req.Contents = append(req.Contents, geminiContent{Role: "user", Parts: parts})
+			} else {
+				req.Contents = append(req.Contents, geminiContent{
+					Role: "user", Parts: []geminiPart{{Text: m.Content}},
+				})
+			}
 		}
 	}
 	flushFuncParts()
@@ -270,9 +292,9 @@ func (c *GeminiClient) doRequest(ctx context.Context, body []byte, model string,
 	baseURL := strings.TrimRight(c.cfg.BaseURL, "/")
 	var url string
 	if stream {
-		url = fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse", baseURL, model)
+		url = fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", baseURL, model)
 	} else {
-		url = fmt.Sprintf("%s/models/%s:generateContent", baseURL, model)
+		url = fmt.Sprintf("%s/v1beta/models/%s:generateContent", baseURL, model)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))

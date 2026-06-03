@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"agent_flow/src/common"
 )
 
 // OpenAIResponsesClient OpenAI Responses API 客户端（/responses 端点）
@@ -188,9 +190,33 @@ func (c *OpenAIResponsesClient) buildRequest(messages []Message, opts ChatOption
 	var inputItems []json.RawMessage
 	for _, m := range messages {
 		switch m.Role {
-		case "system", "user":
+		case "system":
 			item, _ := json.Marshal(map[string]string{"role": m.Role, "content": m.Content})
 			inputItems = append(inputItems, item)
+		case "user":
+			// 多模态内容：ContentParts 非空时构建 content 数组
+			if len(m.ContentParts) > 0 {
+				var parts []map[string]interface{}
+				for _, p := range m.ContentParts {
+					switch p.Type {
+					case "image":
+						parts = append(parts, map[string]interface{}{
+							"type": "input_image",
+							"image_url": "data:" + p.MediaType + ";base64," + p.Data,
+						})
+					default:
+						parts = append(parts, map[string]interface{}{
+							"type": "input_text",
+							"text": p.Text,
+						})
+					}
+				}
+				item, _ := json.Marshal(map[string]interface{}{"role": "user", "content": parts})
+				inputItems = append(inputItems, item)
+			} else {
+				item, _ := json.Marshal(map[string]string{"role": "user", "content": m.Content})
+				inputItems = append(inputItems, item)
+			}
 		case "assistant":
 			if m.Content != "" {
 				item, _ := json.Marshal(map[string]string{"role": "assistant", "content": m.Content})
@@ -229,7 +255,7 @@ func (c *OpenAIResponsesClient) buildRequest(messages []Message, opts ChatOption
 }
 
 func (c *OpenAIResponsesClient) doRequest(ctx context.Context, body []byte) (*http.Response, error) {
-	url := strings.TrimRight(c.cfg.BaseURL, "/") + "/responses"
+	url := common.BuildAPIURL(c.cfg.BaseURL, "/responses")
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {

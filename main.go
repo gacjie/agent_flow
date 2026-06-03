@@ -20,6 +20,8 @@ import (
 	"agent_flow/src/service"
 	"agent_flow/src/tool"
 	"agent_flow/src/view"
+
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -44,7 +46,21 @@ func main() {
 	}
 	defer database.Close()
 
-	// 4. 自动迁移
+	// 4. 启动时清理软删除数据（迁移：从软删除切换到硬删除）
+	cleanSoftDeletes(database.Get())
+
+	// 4.1 迁移：将 "default" 模式统一为 "auto"
+	database.Get().Exec("UPDATE agents SET model_id = 'auto' WHERE model_id = 'default'")
+	database.Get().Exec("UPDATE agents SET model_mode = 'auto' WHERE model_mode = 'default'")
+
+	// 4.2 迁移：删除 model_id 的历史唯一索引（旧版曾使用 uniqueIndex，允许多条相同 model_id 实现负载均衡）
+	database.Get().Exec("DROP INDEX IF EXISTS `idx_llm_models_model_id`")
+
+	// 4.3 迁移：supports_vision → capabilities 字段
+	database.Get().Exec("UPDATE llm_models SET capabilities = 'vision,tools' WHERE supports_vision = 1 AND (capabilities = '' OR capabilities IS NULL)")
+	database.Get().Exec("UPDATE llm_models SET capabilities = 'tools' WHERE (supports_vision = 0 OR supports_vision IS NULL) AND (capabilities = '' OR capabilities IS NULL)")
+
+	// 5. 自动迁移
 	if err := database.AutoMigrate(
 		&model.Admin{},
 		&model.Session{},
@@ -65,8 +81,6 @@ func main() {
 		// 工具系统（system_tools: 内置工具，mcp_tools: MCP工具）
 		&model.SystemTool{},
 		&model.MCPTool{},
-		// 保留旧表（不再使用，兼容现有数据）
-		&model.ExternalTool{},
 	); err != nil {
 		slog.Error("数据库迁移失败", "error", err)
 		os.Exit(1)
@@ -263,10 +277,15 @@ func seedData(cfg *config.AppConfig) {
 		{Key: "site.description", Value: "智能体工作流系统", Label: "站点描述", Group: "站点", Type: "text", Sort: 2},
 		{Key: "auth.session_max_age", Value: "86400", Label: "会话有效期(秒)", Group: "安全", Type: "number", Sort: 1},
 		{Key: "auth.max_login_attempts", Value: "5", Label: "最大登录失败次数", Group: "安全", Type: "number", Sort: 2},
+		{Key: "ai.vision_model", Value: "", Label: "视觉解析模型", Group: "AI 服务", Type: "model_select", Sort: 1},
+		{Key: "ai.image_gen_model", Value: "", Label: "图片生成模型", Group: "AI 服务", Type: "model_select", Sort: 2},
+		{Key: "ai.prompt_enhance_model", Value: "auto", Label: "提示词增强模型", Group: "AI 服务", Type: "model_select", Sort: 3},
 	}
 	for _, c := range configs {
 		db.Where("`key` = ?", c.Key).FirstOrCreate(&c)
 	}
+	// 确保 AI 模型配置字段类型为 model_select（升级兼容）
+	db.Model(&model.SysConfig{}).Where("`key` LIKE ?", "ai.%").Update("type", "model_select")
 
 	// --- SecretKey 持久化（config.yaml 未配置时，生成后直接写回配置文件）---
 	if cfg.App.SecretKey == "" {
@@ -343,4 +362,16 @@ func initLogger(cfg config.LogConfig) *applogger.DailyFileHandler {
 	fileHandler := applogger.NewDailyFileHandler(errDir, slog.LevelWarn)
 	slog.SetDefault(slog.New(applogger.NewMultiHandler(consoleHandler, fileHandler)))
 	return fileHandler
+}
+
+// cleanSoftDeletes 清理主库中被软删除的记录（迁移：从软删除切换到硬删除）
+func cleanSoftDeletes(db *gorm.DB) {
+	tables := []string{
+		"admins", "sessions", "roles", "permissions", "role_permissions",
+		"sys_configs", "llm_models", "skills", "agents", "agent_skills",
+		"projects", "workspaces", "file_indexes", "system_tools", "mcp_tools",
+	}
+	for _, t := range tables {
+		db.Exec(fmt.Sprintf("DELETE FROM %s WHERE deleted_at IS NOT NULL", t))
+	}
 }

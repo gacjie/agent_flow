@@ -30,8 +30,17 @@ type ChatMessage struct {
 	ReasoningContent string `gorm:"type:text" json:"reasoning_content"`    // 推理/思考内容
 	ToolCalls        string `gorm:"type:text" json:"tool_calls"`           // JSON: []ToolCall
 	ToolCallID       string `gorm:"size:100" json:"tool_call_id"`          // tool 消息的调用 ID
+	Attachments      string `gorm:"type:text" json:"attachments"`          // JSON: []Attachment（图片/文件附件）
 	TokenCount       int    `gorm:"default:0" json:"token_count"`
 	AgentName        string `gorm:"size:100" json:"agent_name"`
 }
 
 func (ChatMessage) TableName() string { return "chat_messages" }
+
+// Attachment 消息附件（图片/文件）
+type Attachment struct {
+	Path      string `json:"path"`       // 相对于工作区的路径
+	Name      string `json:"name"`       // 原始文件名
+	MediaType string `json:"media_type"` // MIME 类型
+	Size      int64  `json:"size"`       // 文件大小（字节）
+}

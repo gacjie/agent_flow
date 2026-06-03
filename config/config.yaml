@@ -43,15 +43,14 @@ pagination:
 
 app:
   name: "AgentFlow"
-  version: "1.0.1"
-  secret_key: ""               # AES-256 加密密钥（留空则首次启动自动生成）
+  version: "1.1.0"
+  secret_key: "7391c6974142f9d55a9c70c1fc8752e6cb096b2aa0a380dd2b419279d80af2cd"               # AES-256 加密密钥（留空则首次启动自动生成）
 
 agent:
   context_root: "./context"    # 系统级上下文目录
   project_root: "./project"    # 项目根目录
   working_root: "./workspace"  # 工作区根目录（每个工作区在此目录下创建 UUID 子目录）
   system_root: "./system"      # 系统目录（工具+系统角色）
-  default_model_name: ""       # 默认模型 model_id（如 gpt-4o、deepseek-chat），需与模型管理中的 model_id 一致
   max_iterations: 50           # 工具调用自检间隔轮数（每 N 轮触发死循环检查，默认 50）
   tidy_keep_rounds: 5          # 上下文整理时保留最近对话轮数（默认 5）
 

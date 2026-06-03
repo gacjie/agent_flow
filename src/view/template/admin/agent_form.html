@@ -49,13 +49,12 @@
             <div class="form-control">
                 <label class="form-label">模型</label>
                 <select name="model_id" class="select">
-                    <option value="auto" {{if eq .FormItem.ModelID "auto"}}selected{{end}}>自动切换</option>
-                    <option value="default" {{if eq .FormItem.ModelID "default"}}selected{{end}}>默认模型</option>
+                    <option value="auto" {{if or (eq .FormItem.ModelID "auto") (eq .FormItem.ModelID "default") (eq .FormItem.ModelID "")}}selected{{end}}>自动切换</option>
                     {{range .Models}}
                     <option value="{{.ModelID}}" {{if eq .ModelID $.FormItem.ModelID}}selected{{end}}>{{.Name}}</option>
                     {{end}}
                 </select>
-                <p class="text-sm opacity-60 mt-1">自动切换：报错时按顺序切换到下一个已开启自动切换的模型。默认模型：使用模型管理中设置的默认模型。</p>
+                <p class="text-sm opacity-60 mt-1">自动切换：从已开启自动切换的模型中随机选择，报错时自动切换到其他模型。指定模型：固定使用选中的模型。</p>
             </div>
 
             {{if eq .Method "PUT"}}

@@ -155,13 +155,8 @@
     <div class="dash-card-body">
         <div class="dash-sys-info">
             <div class="dash-sys-item">
-                <span class="dash-sys-label">默认模型</span>
-                {{if .DefaultModel}}
-         <span class="dash-sys-value">{{.DefaultModel.Name}}</span>
-                <span class="badge badge-primary">{{.DefaultModel.Protocol}}</span>
-                {{else}}
-                <span class="dash-sys-value text-muted">未设置</span>
-                {{end}}
+                <span class="dash-sys-label">自动切换模型</span>
+                <span class="dash-sys-value">{{.AutoModelCount}} 个</span>
             </div>
             <div class="dash-sys-item">
                 <span class="dash-sys-label">系统工具</span>

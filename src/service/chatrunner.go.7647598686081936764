@@ -54,17 +54,17 @@ type StreamEvent struct {
 type RunConfig struct {
 	ConversationID uint
 	AgentID        uint
-	WorkspaceID    uint               // 工作区 DB 主键（供任务工具使用）
-	WorkspaceUUID  string             // 工作区 UUID，用于获取 working DB
-	WorkDir        string             // 工作目录（工作文档直接存放于此）
-	ProjectPath    string             // 项目代码路径（非空时作为工具工作目录）
-	AllowedDirs    []string           // 额外允许目录
-	SystemPrompt   string             // 系统提示词（后续由 ContextBuilder 生成）
-	UserMessage    string             // 用户输入
+	WorkspaceID    uint     // 工作区 DB 主键（供任务工具使用）
+	WorkspaceUUID  string   // 工作区 UUID，用于获取 working DB
+	WorkDir        string   // 工作目录（工作文档直接存放于此）
+	ProjectPath    string   // 项目代码路径（非空时作为工具工作目录）
+	AllowedDirs    []string // 额外允许目录
+	SystemPrompt   string   // 系统提示词（后续由 ContextBuilder 生成）
+	UserMessage    string   // 用户输入
 	Attachments    []model.Attachment // 用户上传的附件（图片/文件）
-	IsSubConv      bool               // 子会话标记，整理时保持身份、跳过任务更新和阶段切换
-	ParentConvID   uint               // 父会话 ID（子会话整理接力时需要保持关联）
-	AgentName      string             // 智能体名称（子会话整理接力时需要保持）
+	IsSubConv      bool     // 子会话标记，整理时保持身份、跳过任务更新和阶段切换
+	ParentConvID   uint     // 父会话 ID（子会话整理接力时需要保持关联）
+	AgentName      string   // 智能体名称（子会话整理接力时需要保持）
 }
 
 // modelClient 已解析的模型+客户端对
@@ -732,7 +732,6 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 
 			// 推送工具结果到前端（逐条，保证实时性）并收集待持久化消息
 			var toolMsgs []*model.ChatMessage
-			var toolVisionMsgs []provider.Message
 			for _, tr := range toolResults {
 				// 检查工具结果是否包含图片（生图工具等）
 				var attachmentsJSON string
@@ -772,13 +771,8 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 					trData["attachments"] = attachmentsData
 				}
 				eventCh <- StreamEvent{Type: "tool_result", Data: trData}
-				expanded := r.expandToolImageResult(tr, toolCallNamesByID[tr.ToolCallID])
-				messages = append(messages, expanded[0])
-				if len(expanded) > 1 {
-					toolVisionMsgs = append(toolVisionMsgs, expanded[1:]...)
-				}
+				messages = append(messages, r.expandToolImageResult(tr, toolCallNamesByID[tr.ToolCallID])...)
 			}
-			messages = append(messages, toolVisionMsgs...)
 			// 批量保存工具结果到数据库（单事务）
 			sessionSvc.SaveMessages(toolMsgs)
 
@@ -1360,14 +1354,6 @@ func (r *ChatRunner) loadAttachmentsIntoMessages(messages []provider.Message, co
 	}
 
 	result := make([]provider.Message, 0, len(messages))
-	var pendingToolVisionMsgs []provider.Message
-	flushToolVisionMsgs := func() {
-		if len(pendingToolVisionMsgs) == 0 {
-			return
-		}
-		result = append(result, pendingToolVisionMsgs...)
-		pendingToolVisionMsgs = nil
-	}
 
 	// 建立 index 映射（按顺序对应）
 	for i, raw := range rawMsgs {
@@ -1375,9 +1361,6 @@ func (r *ChatRunner) loadAttachmentsIntoMessages(messages []provider.Message, co
 			break
 		}
 		msg := messages[i]
-		if msg.Role != "tool" {
-			flushToolVisionMsgs()
-		}
 		if raw.Attachments == "" {
 			result = append(result, msg)
 			continue
@@ -1434,7 +1417,7 @@ func (r *ChatRunner) loadAttachmentsIntoMessages(messages []provider.Message, co
 				result = append(result, msg)
 				prompt := toolImagePrompt("")
 				visionParts := append([]provider.ContentPart{{Type: "text", Text: prompt}}, parts...)
-				pendingToolVisionMsgs = append(pendingToolVisionMsgs, provider.Message{
+				result = append(result, provider.Message{
 					Role:         "user",
 					Content:      prompt,
 					ContentParts: visionParts,
@@ -1445,7 +1428,6 @@ func (r *ChatRunner) loadAttachmentsIntoMessages(messages []provider.Message, co
 		}
 		result = append(result, msg)
 	}
-	flushToolVisionMsgs()
 	if len(rawMsgs) < len(messages) {
 		result = append(result, messages[len(rawMsgs):]...)
 	}

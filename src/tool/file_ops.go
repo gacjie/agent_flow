@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -63,6 +64,24 @@ type fileOp = writeOp
 // editItem 编辑操作项（context_ops 等共用）
 type editItem = files.EditItem
 
+// imageExtensions 支持的图片扩展名
+var imageExtensions = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".svg":  "image/svg+xml",
+	".bmp":  "image/bmp",
+}
+
+// isImageFile 判断文件是否为图片并返回 MIME 类型
+func isImageFile(path string) (string, bool) {
+	ext := strings.ToLower(filepath.Ext(path))
+	mime, ok := imageExtensions[ext]
+	return mime, ok
+}
+
 // ── ReadFileTool 读取文件内容（支持批量）─────────────────
 
 type ReadFileTool struct{}
@@ -70,7 +89,7 @@ type ReadFileTool struct{}
 func (t *ReadFileTool) Name() string { return "read_files" }
 
 func (t *ReadFileTool) Description() string {
-	return "读取项目目录下文件的内容，各文件并行读取，结果以分隔块格式返回。支持 offset/limit 按行读取。注意：此工具操作项目代码目录，无法读取工作区文档（工作区文档由系统自动加载到上下文）。"
+	return "读取项目目录下文件的内容，各文件并行读取，结果以分隔块格式返回。支持 offset/limit 按行读取。支持读取图片文件（png/jpg/gif/webp/svg/bmp），图片将以视觉内容返回供分析。注意：此工具操作项目代码目录，无法读取工作区文档（工作区文档由系统自动加载到上下文）。"
 }
 
 func (t *ReadFileTool) Parameters() json.RawMessage {
@@ -113,6 +132,8 @@ func (t *ReadFileTool) Execute(ctx context.Context, args string) *Result {
 	if len(params.Files) > 0 {
 		n := len(params.Files)
 		results := make([]string, n)
+		var allImages []ImageData
+		var mu sync.Mutex
 		var wg sync.WaitGroup
 		for i, f := range params.Files {
 			wg.Add(1)
@@ -121,6 +142,20 @@ func (t *ReadFileTool) Execute(ctx context.Context, args string) *Result {
 				fullPath, err := safePath(ctx, path)
 				if err != nil {
 					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+					return
+				}
+				// 图片文件：读取为 base64 放入 Images
+				if mimeType, ok := isImageFile(fullPath); ok {
+					img, err := readImageFile(fullPath, path, mimeType)
+					if err != nil {
+						results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+					} else {
+						mu.Lock()
+						allImages = append(allImages, img)
+						mu.Unlock()
+						info, _ := os.Stat(fullPath)
+						results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n[图片文件: %s, %d 字节]", idx+1, n, path, mimeType, info.Size())
+					}
 					return
 				}
 				content, err := files.ReadSingleFile(fullPath, offset, limit)
@@ -132,7 +167,11 @@ func (t *ReadFileTool) Execute(ctx context.Context, args string) *Result {
 			}(i, f.Path, f.Offset, f.Limit)
 		}
 		wg.Wait()
-		return SuccessResult(strings.Join(results, "\n\n"))
+		result := SuccessResult(strings.Join(results, "\n\n"))
+		if len(allImages) > 0 {
+			result.Images = allImages
+		}
+		return result
 	}
 
 	if params.Path == "" {
@@ -142,11 +181,35 @@ func (t *ReadFileTool) Execute(ctx context.Context, args string) *Result {
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
+	// 图片文件：读取为 base64 放入 Images
+	if mimeType, ok := isImageFile(fullPath); ok {
+		img, err := readImageFile(fullPath, params.Path, mimeType)
+		if err != nil {
+			return ErrorResult(err.Error())
+		}
+		info, _ := os.Stat(fullPath)
+		result := SuccessResult(fmt.Sprintf("[图片文件: %s, %d 字节]", mimeType, info.Size()))
+		result.Images = []ImageData{img}
+		return result
+	}
 	content, err := files.ReadSingleFile(fullPath, params.Offset, params.Limit)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 	return SuccessResult(content)
+}
+
+// readImageFile 读取图片文件并返回 ImageData
+func readImageFile(fullPath, relPath, mimeType string) (ImageData, error) {
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return ImageData{}, err
+	}
+	return ImageData{
+		Path:      relPath,
+		MediaType: mimeType,
+		Data:      base64.StdEncoding.EncodeToString(data),
+	}, nil
 }
 
 // ── WriteFileTool 文件写入与编辑（支持批量）──────────────

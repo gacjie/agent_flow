@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"agent_flow/src/common"
 )
 
 // OpenAIClient OpenAI 兼容协议客户端（覆盖 OpenAI/DeepSeek/通义千问等）
@@ -68,7 +70,7 @@ type openaiThinking struct {
 
 type openaiMessage struct {
 	Role             string           `json:"role"`
-	Content          string           `json:"content"`
+	Content          json.RawMessage  `json:"content"`
 	ReasoningContent string           `json:"reasoning_content,omitempty"`
 	ToolCalls        []openaiToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string           `json:"tool_call_id,omitempty"`
@@ -184,8 +186,11 @@ func (c *OpenAIClient) Chat(ctx context.Context, messages []Message, opts ChatOp
 	}
 
 	choice := oResp.Choices[0]
+	// 从 json.RawMessage 提取文本内容（响应中 content 始终为字符串）
+	var contentStr string
+	_ = json.Unmarshal(choice.Message.Content, &contentStr)
 	result := &Response{
-		Content:          choice.Message.Content,
+		Content:          contentStr,
 		ReasoningContent: choice.Message.ReasoningContent,
 		FinishReason:     choice.FinishReason,
 		Usage: Usage{
@@ -260,9 +265,31 @@ func (c *OpenAIClient) buildRequest(messages []Message, opts ChatOptions) ([]byt
 	for _, m := range messages {
 		om := openaiMessage{
 			Role:             m.Role,
-			Content:          m.Content,
 			ReasoningContent: m.ReasoningContent,
 			ToolCallID:       m.ToolCallID,
+		}
+		// 多模态内容：ContentParts 非空时构建数组格式
+		if len(m.ContentParts) > 0 && (m.Role == "user" || m.Role == "tool") {
+			var parts []map[string]interface{}
+			for _, p := range m.ContentParts {
+				switch p.Type {
+				case "image":
+					parts = append(parts, map[string]interface{}{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url": "data:" + p.MediaType + ";base64," + p.Data,
+						},
+					})
+				default:
+					parts = append(parts, map[string]interface{}{
+						"type": "text",
+						"text": p.Text,
+					})
+				}
+			}
+			om.Content, _ = json.Marshal(parts)
+		} else {
+			om.Content, _ = json.Marshal(m.Content)
 		}
 		for _, tc := range m.ToolCalls {
 			args := tc.Arguments
@@ -310,7 +337,7 @@ func (c *OpenAIClient) buildRequest(messages []Message, opts ChatOptions) ([]byt
 }
 
 func (c *OpenAIClient) doRequest(ctx context.Context, body []byte) (*http.Response, error) {
-	url := strings.TrimRight(c.cfg.BaseURL, "/") + "/chat/completions"
+	url := common.BuildAPIURL(c.cfg.BaseURL, "/chat/completions")
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {

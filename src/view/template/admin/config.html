@@ -23,6 +23,31 @@
             </select>
             {{else if eq .Type "number"}}
             <input type="number" name="config_{{.Key}}" value="{{.Value}}" class="input">
+            {{else if eq .Type "model_select"}}
+            {{$curVal := .Value}}
+            {{$key := .Key}}
+            <select name="config_{{.Key}}" class="select">
+                <option value="" {{if eq $curVal ""}}selected{{end}}>未配置</option>
+                {{if eq $key "ai.prompt_enhance_model"}}
+                <option value="auto" {{if eq $curVal "auto"}}selected{{end}}>自动切换</option>
+                {{range $.Models}}
+                <option value="{{.ModelID}}" {{if eq .ModelID $curVal}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+                {{else if eq $key "ai.vision_model"}}
+                {{range $.VisionModels}}
+                <option value="{{.ModelID}}" {{if eq .ModelID $curVal}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+                {{else if eq $key "ai.image_gen_model"}}
+                {{range $.ImageGenModels}}
+                <option value="{{.ModelID}}" {{if eq .ModelID $curVal}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+                {{else}}
+                <option value="auto" {{if eq $curVal "auto"}}selected{{end}}>自动切换</option>
+                {{range $.Models}}
+                <option value="{{.ModelID}}" {{if eq .ModelID $curVal}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+                {{end}}
+            </select>
             {{else}}
             <input type="text" name="config_{{.Key}}" value="{{.Value}}" class="input">
             {{end}}

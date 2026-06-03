@@ -55,6 +55,7 @@
 循环处理第一个未完成开发 phase：
 1. 用 `task_lists()` 找到当前 phase、父任务 ID、未完成叶子任务和技术栈标签。
 2. 路由专家：Go -> gavin，Python -> lucas，前端 -> emma，未限定后端语言则根据项目技术栈确定。
+3. 确认当前 phase 的所有叶子任务技术栈标签与目标专家匹配；若发现不匹配的任务（如前端任务混入后端 phase），先要求 noah 重新拆分或由编排师调整，不得直接下发。
 3. 一个 phase 只调用一次 `call_agent`：将整个 phase 交给对应专家，指令中给出阶段父任务 ID，由专家在单次会话中完成该 phase 的全部叶子任务。禁止按单个叶子任务逐个调用专家。
 
 > 正例：phase 含 3 个 [Backend:Go] 叶子任务 → 一次 `call_agent(gavin)`，指令：`读取 task_lists(task_id=5, verbose=true) 获取 phase-1 全部任务详情，逐个完成 3 个叶子任务并更新状态。`

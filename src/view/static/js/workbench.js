@@ -119,6 +119,12 @@
     var wbFilesClose   = $('wb-files-close');
     var wbFilesList    = $('wb-files-list');
 
+    // 附件面板元素
+    var wbToggleUploads = $('wb-toggle-uploads');
+    var wbUploadsPanel  = $('wb-uploads-panel');
+    var wbUploadsClose  = $('wb-uploads-close');
+    var wbUploadsList   = $('wb-uploads-list');
+
     // -- 状态变量 --
 
     var currentConvId  = null;
@@ -131,6 +137,7 @@
     var docsPanelVisible   = false;   // 文档面板是否可见
     var projDocsPanelVisible = false; // 项目文档面板是否可见
     var filesPanelVisible  = false;   // 项目文件面板是否可见
+    var uploadsPanelVisible = false;  // 附件面板是否可见
     var editingDocInfo     = null;    // 当前编辑的文档信息 {type, path, rawContent}
     var pendingTaskRefresh = false;   // 是否有待刷新的任务变更
     var taskRefreshTimer   = null;    // 任务刷新防抖定时器
@@ -262,6 +269,7 @@
         if (docsPanelVisible) hideDocsPanel();
         if (projDocsPanelVisible) hideProjDocsPanel();
         if (filesPanelVisible) hideFilesPanel();
+        if (uploadsPanelVisible) hideUploadsPanel();
         taskPanelVisible = true;
         if (wbTaskPanel) wbTaskPanel.classList.remove('wb-hidden');
         if (wbToggleTasks) wbToggleTasks.classList.add('active');
@@ -320,6 +328,7 @@
         if (taskPanelVisible) hideTaskPanel();
         if (projDocsPanelVisible) hideProjDocsPanel();
         if (filesPanelVisible) hideFilesPanel();
+        if (uploadsPanelVisible) hideUploadsPanel();
         docsPanelVisible = true;
         if (wbDocsPanel) wbDocsPanel.classList.remove('wb-hidden');
         if (wbToggleDocs) wbToggleDocs.classList.add('active');
@@ -348,6 +357,7 @@
         if (docsPanelVisible) hideDocsPanel();
         if (taskPanelVisible) hideTaskPanel();
         if (filesPanelVisible) hideFilesPanel();
+        if (uploadsPanelVisible) hideUploadsPanel();
         projDocsPanelVisible = true;
         if (wbProjDocsPanel) wbProjDocsPanel.classList.remove('wb-hidden');
         if (wbToggleProjDocs) wbToggleProjDocs.classList.add('active');
@@ -448,6 +458,14 @@
                         viewDoc(file.path);
                     });
                     item.appendChild(btn);
+                    var refBtn = document.createElement('button');
+                    refBtn.className = 'wb-doc-view-btn';
+                    refBtn.textContent = '引用';
+                    refBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        referenceFile(file.path, file.name, 'text/markdown', file.size);
+                    });
+                    item.appendChild(refBtn);
                     scopeDiv.appendChild(item);
                 })(files[fi]);
             }
@@ -561,6 +579,14 @@
                         viewProjDoc(file.path);
                     });
                     item.appendChild(btn);
+                    var refBtn = document.createElement('button');
+                    refBtn.className = 'wb-doc-view-btn';
+                    refBtn.textContent = '引用';
+                    refBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        referenceFile('project://' + file.path, file.name, 'text/markdown', file.size);
+                    });
+                    item.appendChild(refBtn);
                     scopeDiv.appendChild(item);
                 })(files[fi]);
             }
@@ -600,6 +626,7 @@
         if (docsPanelVisible) hideDocsPanel();
         if (projDocsPanelVisible) hideProjDocsPanel();
         if (taskPanelVisible) hideTaskPanel();
+        if (uploadsPanelVisible) hideUploadsPanel();
         filesPanelVisible = true;
         if (wbFilesPanel) wbFilesPanel.classList.remove('wb-hidden');
         if (wbToggleFiles) wbToggleFiles.classList.add('active');
@@ -621,6 +648,156 @@
 
     if (wbToggleFiles) wbToggleFiles.addEventListener('click', toggleFilesPanel);
     if (wbFilesClose) wbFilesClose.addEventListener('click', hideFilesPanel);
+
+    // -- 附件面板切换 --
+
+    function showUploadsPanel() {
+        if (docsPanelVisible) hideDocsPanel();
+        if (projDocsPanelVisible) hideProjDocsPanel();
+        if (taskPanelVisible) hideTaskPanel();
+        if (filesPanelVisible) hideFilesPanel();
+        uploadsPanelVisible = true;
+        if (wbUploadsPanel) wbUploadsPanel.classList.remove('wb-hidden');
+        if (wbToggleUploads) wbToggleUploads.classList.add('active');
+        try { localStorage.setItem('wb_right_panel', 'uploads'); } catch(e) {}
+        loadUploads();
+    }
+
+    function hideUploadsPanel() {
+        uploadsPanelVisible = false;
+        if (wbUploadsPanel) wbUploadsPanel.classList.add('wb-hidden');
+        if (wbToggleUploads) wbToggleUploads.classList.remove('active');
+        try { localStorage.setItem('wb_right_panel', ''); } catch(e) {}
+    }
+
+    function toggleUploadsPanel() {
+        if (uploadsPanelVisible) hideUploadsPanel();
+        else showUploadsPanel();
+    }
+
+    if (wbToggleUploads) wbToggleUploads.addEventListener('click', toggleUploadsPanel);
+    if (wbUploadsClose) wbUploadsClose.addEventListener('click', hideUploadsPanel);
+
+    // -- 附件加载与渲染 --
+
+    function loadUploads() {
+        if (!WB_CONFIG.workspaceId) return;
+        apiRequest('/admin/workbench/uploads/list?workspace_id=' + WB_CONFIG.workspaceId)
+            .then(function(resp) {
+                var files = (resp.data && resp.data.files) || [];
+                renderUploadsList(files);
+            });
+    }
+
+    function renderUploadsList(files) {
+        if (!wbUploadsList) return;
+        if (!files || !files.length) {
+            wbUploadsList.innerHTML = '<div class="wb-empty" style="padding:2rem 0;"><span>暂无附件</span></div>';
+            return;
+        }
+
+        var scopes = {};
+        var scopeOrder = [];
+        for (var i = 0; i < files.length; i++) {
+            var s = files[i].scope || 'uploads';
+            if (!scopes[s]) { scopes[s] = []; scopeOrder.push(s); }
+            scopes[s].push(files[i]);
+        }
+
+        var scopeLabels = { uploads: '上传文件', screenshots: '浏览器截图' };
+        wbUploadsList.innerHTML = '';
+        for (var si = 0; si < scopeOrder.length; si++) {
+            var scope = scopeOrder[si];
+            var items = scopes[scope];
+            var scopeDiv = document.createElement('div');
+            scopeDiv.className = 'wb-docs-scope';
+            scopeDiv.innerHTML = '<div class="wb-docs-scope-header">' +
+                '<span class="wb-docs-scope-badge">' + escapeHtml(scope) + '</span>' +
+                '<span>' + escapeHtml(scopeLabels[scope] || scope) + ' (' + items.length + ')</span></div>';
+
+            for (var fi = 0; fi < items.length; fi++) {
+                (function(file) {
+                    var item = document.createElement('div');
+                    item.className = 'wb-doc-item';
+                    var isImage = file.media_type && file.media_type.indexOf('image/') === 0;
+                    var iconSvg = isImage
+                        ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+                        : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+                    item.innerHTML =
+                        '<span class="wb-doc-icon">' + iconSvg + '</span>' +
+                        '<div class="wb-doc-info">' +
+                        '<div class="wb-doc-name" title="' + escapeHtml(file.path) + '">' + escapeHtml(file.name) + '</div>' +
+                        '<div class="wb-doc-meta">' + escapeHtml(file.size_text) + ' · ' + escapeHtml(file.mod_time) + '</div></div>';
+                    var viewBtn = document.createElement('button');
+                    viewBtn.className = 'wb-doc-view-btn';
+                    viewBtn.textContent = '查看';
+                    viewBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        viewUploadFile(file);
+                    });
+                    item.appendChild(viewBtn);
+                    var refBtn = document.createElement('button');
+                    refBtn.className = 'wb-doc-view-btn';
+                    refBtn.textContent = '引用';
+                    refBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        referenceFile(file.path, file.name, file.media_type, file.size);
+                    });
+                    item.appendChild(refBtn);
+                    scopeDiv.appendChild(item);
+                })(items[fi]);
+            }
+            wbUploadsList.appendChild(scopeDiv);
+        }
+    }
+
+    function viewUploadFile(file) {
+        if (!WB_CONFIG.workspaceId) return;
+        var isImage = file.media_type && file.media_type.indexOf('image/') === 0;
+        var isText = file.media_type === 'text/plain' || file.media_type === 'text/markdown';
+        var fileUrl = '/admin/workbench/uploads?workspace_id=' + WB_CONFIG.workspaceId + '&path=' + encodeURIComponent(file.path);
+
+        if (isImage) {
+            var lbImg = lightbox.querySelector('.wb-lightbox-img');
+            if (lbImg) { lbImg.src = fileUrl; lightbox.style.display = 'flex'; }
+        } else if (isText) {
+            editingDocInfo = { type: 'upload', path: file.path };
+            if (docModalTitle) docModalTitle.textContent = file.name;
+            if (docContent) { docContent.textContent = '加载中...'; docContent.classList.remove('wb-hidden'); }
+            if (docEditor) docEditor.classList.add('wb-hidden');
+            if (docEditBtn) docEditBtn.classList.remove('wb-hidden');
+            if (docSaveBtn) docSaveBtn.classList.add('wb-hidden');
+            if (docCancelEditBtn) docCancelEditBtn.classList.add('wb-hidden');
+            if (docModalOverlay) docModalOverlay.classList.add('active');
+
+            fetch(fileUrl).then(function(r) { return r.text(); }).then(function(text) {
+                editingDocInfo.rawContent = text;
+                if (file.media_type === 'text/markdown') {
+                    renderMarkdown(text, docContent);
+                } else {
+                    if (docContent) { docContent.textContent = text; docContent.className = 'wb-doc-content'; }
+                }
+            }).catch(function() {
+                if (docContent) docContent.textContent = '读取失败';
+            });
+        }
+    }
+
+    // -- 通用引用函数 --
+
+    function referenceFile(path, name, mediaType, size) {
+        for (var i = 0; i < pendingAttachments.length; i++) {
+            if (pendingAttachments[i].path === path) return;
+        }
+        pendingAttachments.push({ path: path, name: name, media_type: mediaType || 'application/octet-stream', size: size || 0 });
+        renderAttachPreview();
+    }
+
+    function getMediaTypeByExt(name) {
+        var ext = (name || '').toLowerCase().replace(/^.*\./, '.');
+        var types = {'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.svg':'image/svg+xml','.bmp':'image/bmp','.pdf':'application/pdf','.txt':'text/plain','.md':'text/markdown','.go':'text/plain','.js':'text/plain','.ts':'text/plain','.py':'text/plain','.java':'text/plain','.html':'text/html','.css':'text/css','.json':'application/json','.yaml':'text/plain','.yml':'text/plain','.xml':'text/xml','.sh':'text/plain','.sql':'text/plain'};
+        return types[ext] || 'text/plain';
+    }
 
     // -- 项目文件树加载与渲染 --
 
@@ -683,9 +860,15 @@
                         '<svg class="wb-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
                         '<span class="wb-file-name">' + escapeHtml(file.name) + '</span>' +
                         '<span class="wb-file-size">' + escapeHtml(file.size_text || '') + '</span>' +
+                        '<button class="wb-doc-view-btn wb-file-ref-btn">引用</button>' +
                         '</div>';
                     var fileItemEl = node.querySelector('.wb-file-item');
-                    fileItemEl.addEventListener('click', function() {
+                    fileItemEl.addEventListener('click', function(e) {
+                        if (e.target.classList.contains('wb-file-ref-btn')) {
+                            e.stopPropagation();
+                            referenceFile('project://' + file.path, file.name, getMediaTypeByExt(file.name), file.size || 0);
+                            return;
+                        }
                         viewProjectFile(file.path, file.name);
                     });
                 }
@@ -752,7 +935,8 @@
         var urlMap = {
             'docs': '/admin/workbench/docs/save',
             'proj-docs': '/admin/workbench/project-docs/save',
-            'proj-files': '/admin/workbench/project-files/save'
+            'proj-files': '/admin/workbench/project-files/save',
+            'upload': '/admin/workbench/uploads/save'
         };
         var url = urlMap[editingDocInfo.type];
         if (!url) return;
@@ -1170,7 +1354,16 @@
         for (var i = 0; i < msgs.length; i++) {
             var m = msgs[i];
             if (m.role === 'system') continue;
-            if (m.role === 'tool') { appendToolResultBlock({ content: m.content || '' }); continue; }
+            if (m.role === 'tool') {
+                var toolAttachments = null;
+                if (m.attachments && typeof m.attachments === 'string') {
+                    try { toolAttachments = JSON.parse(m.attachments); } catch(e) {}
+                } else if (Array.isArray(m.attachments)) {
+                    toolAttachments = m.attachments;
+                }
+                appendToolResultBlock({ content: m.content || '' }, toolAttachments);
+                continue;
+            }
             var toolCalls = null;
             if (m.tool_calls && typeof m.tool_calls === 'string') {
                 try { toolCalls = JSON.parse(m.tool_calls); } catch(e) { toolCalls = null; }
@@ -1184,7 +1377,13 @@
                 }
                 continue;
             }
-            appendMessage(m.role, m.content, toolCalls, m.agent_name);
+            var attachments = null;
+            if (m.attachments && typeof m.attachments === 'string') {
+                try { attachments = JSON.parse(m.attachments); } catch(e) { attachments = null; }
+            } else if (Array.isArray(m.attachments)) {
+                attachments = m.attachments;
+            }
+            appendMessage(m.role, m.content, toolCalls, m.agent_name, attachments);
         }
         if (summary) {
             appendSummaryBlock(summary);
@@ -1192,15 +1391,44 @@
         scrollToBottom();
     }
 
-    function appendMessage(role, content, toolCalls, agentName) {
+    function getFileIcon(mediaType, name) {
+        if (!mediaType) mediaType = '';
+        if (mediaType === 'application/pdf' || (name && name.endsWith('.pdf'))) return '📄';
+        if (mediaType.startsWith('text/') || /\.(txt|md|log|csv)$/i.test(name || '')) return '📝';
+        return '📎';
+    }
+
+    function buildAttachmentsHtml(attachments) {
+        if (!attachments || !attachments.length) return '';
+        var html = '<div class="wb-msg-attachments">';
+        for (var i = 0; i < attachments.length; i++) {
+            var att = attachments[i];
+            var fileUrl = '/admin/workbench/uploads?workspace_id=' + WB_CONFIG.workspaceId + '&path=' + encodeURIComponent(att.path);
+            if (att.media_type && att.media_type.startsWith('image/')) {
+                html += '<div class="wb-msg-attach-card wb-msg-attach-image" data-url="' + fileUrl + '" data-name="' + escapeHtml(att.name) + '">' +
+                    '<img src="' + fileUrl + '" alt="' + escapeHtml(att.name) + '">' +
+                    '<span class="wb-msg-attach-name">' + escapeHtml(att.name) + '</span></div>';
+            } else {
+                html += '<a class="wb-msg-attach-card wb-msg-attach-file" href="' + fileUrl + '" target="_blank" title="' + escapeHtml(att.name) + '">' +
+                    '<span class="wb-msg-attach-icon">' + getFileIcon(att.media_type, att.name) + '</span>' +
+                    '<span class="wb-msg-attach-name">' + escapeHtml(att.name) + '</span></a>';
+            }
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function appendMessage(role, content, toolCalls, agentName, attachments) {
         var div = document.createElement('div');
         div.className = 'wb-message wb-message-' + role;
         var avatar = (role === 'user') ? 'U' : 'A';
         var label  = (role === 'user') ? '你' : (agentName || 'AI');
+        var bubbleContent = escapeHtml(content || '');
+        var attachHtml = buildAttachmentsHtml(attachments);
         div.innerHTML = '<div class="wb-message-avatar">' + avatar + '</div>' +
             '<div class="wb-message-body">' +
             '<div class="wb-message-role">' + escapeHtml(label) + '</div>' +
-            '<div class="wb-message-bubble">' + escapeHtml(content || '') + '</div></div>';
+            '<div class="wb-message-bubble">' + bubbleContent + attachHtml + '</div></div>';
         wbMessages.appendChild(div);
         if (toolCalls && toolCalls.length) {
             for (var i = 0; i < toolCalls.length; i++) { appendToolCallBlock(toolCalls[i]); }
@@ -1256,7 +1484,7 @@
         scrollToBottom();
     }
 
-    function appendToolResultBlock(data) {
+    function appendToolResultBlock(data, attachments) {
         var div = document.createElement('div');
         var content = (data && data.content) || '';
         var isError = (data && data.is_error === 'true') || content.indexOf('[错误]') === 0;
@@ -1285,6 +1513,13 @@
             div.querySelector('.wb-tool-result-header').addEventListener('click', function() {
                 div.classList.toggle('wb-expanded');
             });
+        }
+        // 工具结果含图片附件时显示
+        var toolAtts = attachments || (data && data.attachments);
+        if (toolAtts && toolAtts.length) {
+            var attachDiv = document.createElement('div');
+            attachDiv.innerHTML = buildAttachmentsHtml(toolAtts);
+            if (attachDiv.firstChild) div.appendChild(attachDiv.firstChild);
         }
         wbMessages.appendChild(div);
         scrollToBottom();
@@ -1686,12 +1921,14 @@
         activeTask = true;
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         setSendButtonState('sending');
-        if (wbInput) { wbInput.value = ''; wbInput.style.height = 'auto'; }
+        if (wbInput) { wbInput.value = ''; wbInput.style.height = ''; }
 
         var emptyEl = wbMessages ? wbMessages.querySelector('.wb-empty') : null;
         if (emptyEl) emptyEl.remove();
 
-        appendMessage('user', msg);
+        var sendAttachments = (pendingAttachments && pendingAttachments.length > 0)
+            ? pendingAttachments.slice() : null;
+        appendMessage('user', msg, null, null, sendAttachments);
         scrollToBottom();
 
         // 获取当前选中智能体的 title 作为初始值
@@ -1720,6 +1957,11 @@
         lastSeq = 0;
         var body = { message: msg, workspace_id: WB_CONFIG.workspaceId || 0, last_seq: 0 };
         if (wbSelAgent && wbSelAgent.value) body.agent_id = parseInt(wbSelAgent.value, 10);
+        if (sendAttachments) {
+            body.attachments = sendAttachments;
+            pendingAttachments = [];
+            renderAttachPreview();
+        }
         connectSSE(state, body);
     }
 
@@ -1755,7 +1997,19 @@
         });
         wbInput.addEventListener('input', function() {
             this.style.height = 'auto';
-            this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+            this.style.height = Math.max(66, Math.min(this.scrollHeight, 400)) + 'px';
+        });
+        wbInput.addEventListener('paste', function(e) {
+            var items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            var hasFile = false;
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].kind === 'file') {
+                    var file = items[i].getAsFile();
+                    if (file) { uploadFile(file); hasFile = true; }
+                }
+            }
+            if (hasFile) e.preventDefault();
         });
     }
 
@@ -1800,12 +2054,14 @@
             if (wbToggleDocs) wbToggleDocs.style.display = '';
             if (wbToggleProjDocs) wbToggleProjDocs.style.display = WB_CONFIG.hasProject ? '' : 'none';
             if (wbToggleFiles) wbToggleFiles.style.display = WB_CONFIG.hasProject ? '' : 'none';
+            if (wbToggleUploads) wbToggleUploads.style.display = '';
             var savedPanel = '';
             try { savedPanel = localStorage.getItem('wb_right_panel') || ''; } catch(e) {}
             if (savedPanel === 'tasks') showTaskPanel();
             else if (savedPanel === 'docs') showDocsPanel();
             else if (savedPanel === 'proj-docs' && WB_CONFIG.hasProject) showProjDocsPanel();
             else if (savedPanel === 'files' && WB_CONFIG.hasProject) showFilesPanel();
+            else if (savedPanel === 'uploads') showUploadsPanel();
         } else {
             if (wbInput) wbInput.placeholder = '请先在左侧选择工作区...';
         }
@@ -1822,6 +2078,137 @@
                 }
             });
         }
+    }
+
+    // ========== 文件上传功能 ==========
+    var wbBtnUpload = $('wb-btn-upload');
+    var wbFileInput = $('wb-file-input');
+    var wbAttachPreview = $('wb-attach-preview');
+    var pendingAttachments = [];
+
+    if (wbBtnUpload) {
+        wbBtnUpload.addEventListener('click', function() {
+            if (wbFileInput) wbFileInput.click();
+        });
+    }
+
+    if (wbFileInput) {
+        wbFileInput.addEventListener('change', function() {
+            var files = wbFileInput.files;
+            if (!files || !files.length) return;
+            if (!WB_CONFIG.workspaceId) { alert('请先选择工作区'); wbFileInput.value = ''; return; }
+            for (var i = 0; i < files.length; i++) {
+                uploadFile(files[i]);
+            }
+            wbFileInput.value = '';
+        });
+    }
+
+    function uploadFile(file) {
+        var formData = new FormData();
+        formData.append('file', file);
+        formData.append('workspace_id', WB_CONFIG.workspaceId);
+
+        fetch('/admin/workbench/upload', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRF-Token': WB_CONFIG.csrfToken || '' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(resp) {
+            if (resp.code === 0 && resp.data) {
+                pendingAttachments.push(resp.data);
+                renderAttachPreview();
+            } else {
+                alert(resp.message || '上传失败');
+            }
+        })
+        .catch(function() { alert('上传失败'); });
+    }
+
+    function renderAttachPreview() {
+        if (!wbAttachPreview) return;
+        wbAttachPreview.innerHTML = '';
+        pendingAttachments.forEach(function(att, idx) {
+            var item = document.createElement('div');
+            item.className = 'wb-attach-item';
+            if (att.media_type && att.media_type.startsWith('image/')) {
+                var img = document.createElement('img');
+                img.src = '/admin/workbench/uploads?workspace_id=' + WB_CONFIG.workspaceId + '&path=' + encodeURIComponent(att.path);
+                item.appendChild(img);
+            }
+            var name = document.createElement('span');
+            name.className = 'wb-attach-name';
+            name.textContent = att.name;
+            item.appendChild(name);
+            var btn = document.createElement('button');
+            btn.className = 'wb-attach-remove';
+            btn.textContent = '×';
+            btn.onclick = function() { pendingAttachments.splice(idx, 1); renderAttachPreview(); };
+            item.appendChild(btn);
+            wbAttachPreview.appendChild(item);
+        });
+    }
+
+    // ========== Lightbox 图片预览 ==========
+    var lightbox = document.createElement('div');
+    lightbox.className = 'wb-lightbox';
+    lightbox.innerHTML = '<div class="wb-lightbox-backdrop"></div><img class="wb-lightbox-img" src="" alt="">';
+    lightbox.style.display = 'none';
+    document.body.appendChild(lightbox);
+
+    lightbox.addEventListener('click', function() {
+        lightbox.style.display = 'none';
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && lightbox.style.display !== 'none') {
+            lightbox.style.display = 'none';
+        }
+    });
+
+    if (wbMessages) {
+        wbMessages.addEventListener('click', function(e) {
+            var card = e.target.closest('.wb-msg-attach-image');
+            if (card) {
+                var url = card.getAttribute('data-url');
+                if (url) {
+                    lightbox.querySelector('.wb-lightbox-img').src = url;
+                    lightbox.style.display = 'flex';
+                }
+            }
+        });
+    }
+
+    // ========== 提示词增强功能 ==========
+    var wbBtnEnhance = $('wb-btn-enhance');
+    if (wbBtnEnhance) {
+        wbBtnEnhance.addEventListener('click', function() {
+            var msg = wbInput ? wbInput.value.trim() : '';
+            if (!msg) { alert('请先输入内容'); return; }
+            if (!WB_CONFIG.workspaceId) { alert('请先选择工作区'); return; }
+            wbBtnEnhance.classList.add('loading');
+            wbBtnEnhance.disabled = true;
+            apiRequest('/admin/workbench/enhance-prompt', {
+                method: 'POST',
+                body: JSON.stringify({ message: msg, workspace_id: WB_CONFIG.workspaceId })
+            }).then(function(resp) {
+                if (resp.data && resp.data.enhanced) {
+                    wbInput.value = resp.data.enhanced;
+                    wbInput.style.height = 'auto';
+                    wbInput.style.height = Math.max(66, Math.min(wbInput.scrollHeight, 400)) + 'px';
+                    if (resp.data.warning) {
+                        alert(resp.data.warning);
+                    }
+                } else {
+                    alert(resp.message || '增强失败');
+                }
+            }).catch(function() {
+                alert('请求失败');
+            }).finally(function() {
+                wbBtnEnhance.classList.remove('loading');
+                wbBtnEnhance.disabled = false;
+            });
+        });
     }
 
     init();

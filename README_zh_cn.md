@@ -168,25 +168,6 @@ go build -o agent_flow .
 ./agent_flow
 ```
 
-### 交叉编译
-
-```bash
-# Linux / macOS / Git Bash
-bash build.sh
-
-# Windows CMD
-build.bat
-```
-
-编译产物输出到 `build/` 目录：
-
-| 文件 | 平台 | 架构 |
-|------|------|------|
-| `agent_flow_windows_amd64.exe` | Windows | x86_64 |
-| `agent_flow_linux_amd64` | Linux | x86_64 |
-| `agent_flow_linux_arm64` | Linux | ARM64 |
-| `agent_flow_linux_armv7` | Linux | ARMv7 |
-
 ## 配置说明
 
 配置文件：`config/config.yaml`

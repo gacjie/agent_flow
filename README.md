@@ -164,25 +164,6 @@ go build -o agent_flow .
 ./agent_flow
 ```
 
-### Cross-platform Build
-
-```bash
-# Linux / macOS / Git Bash
-bash build.sh
-
-# Windows CMD
-build.bat
-```
-
-Build outputs in `build/` directory:
-
-| File | Platform | Architecture |
-|------|----------|-------------|
-| `agent_flow_windows_amd64.exe` | Windows | x86_64 |
-| `agent_flow_linux_amd64` | Linux | x86_64 |
-| `agent_flow_linux_arm64` | Linux | ARM64 |
-| `agent_flow_linux_armv7` | Linux | ARMv7 |
-
 ## Configuration
 
 Configuration file: `config/config.yaml`

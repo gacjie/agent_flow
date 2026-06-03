@@ -73,13 +73,12 @@ type AppInfo struct {
 
 // AgentConfig 智能体系统配置
 type AgentConfig struct {
-	ContextRoot      string `mapstructure:"context_root"`
-	ProjectRoot      string `mapstructure:"project_root"`
-	WorkingRoot      string `mapstructure:"working_root"`
-	SystemRoot       string `mapstructure:"system_root"`       // 系统目录（工具+系统角色）
-	DefaultModelName string `mapstructure:"default_model_name"`
-	MaxIterations    int    `mapstructure:"max_iterations"`    // 工具调用自检间隔轮数
-	TidyKeepRounds   int    `mapstructure:"tidy_keep_rounds"`  // 上下文整理保留轮数，默认 5
+	ContextRoot    string `mapstructure:"context_root"`
+	ProjectRoot    string `mapstructure:"project_root"`
+	WorkingRoot    string `mapstructure:"working_root"`
+	SystemRoot     string `mapstructure:"system_root"`      // 系统目录（工具+系统角色）
+	MaxIterations  int    `mapstructure:"max_iterations"`   // 工具调用自检间隔轮数
+	TidyKeepRounds int    `mapstructure:"tidy_keep_rounds"` // 上下文整理保留轮数，默认 5
 }
 
 type PaginationConfig struct {
@@ -144,7 +143,6 @@ func Load(configPath string) (*AppConfig, error) {
 	v.SetDefault("agent.project_root", "./project")
 	v.SetDefault("agent.working_root", "./workspace")
 	v.SetDefault("agent.system_root", "./system")
-	v.SetDefault("agent.default_model_name", "")
 	v.SetDefault("agent.max_iterations", 50)
 	v.SetDefault("agent.tidy_keep_rounds", 5)
 	v.SetDefault("llm.timeout", 120)

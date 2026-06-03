@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"agent_flow/src/common"
 	"agent_flow/src/config"
@@ -58,11 +59,14 @@ func (c *LLMProviderCtrl) List(w http.ResponseWriter, r *http.Request) {
 // CreateForm 创建模型表单页面
 func (c *LLMProviderCtrl) CreateForm(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
-		"Title":     "添加模型",
-		"Action":    "/admin/models",
-		"Method":    "POST",
-		"FormModel": model.LLMModel{MaxInputTokens: 128000, MaxOutputTokens: 4096},
-		"AdminPage": true,
+		"Title":      "添加模型",
+		"Action":     "/admin/models",
+		"Method":     "POST",
+		"FormModel":  model.LLMModel{MaxInputTokens: 128000, MaxOutputTokens: 4096, Capabilities: "tools"},
+		"HasVision":  false,
+		"HasImageGen": false,
+		"HasTools":   true,
+		"AdminPage":  true,
 		"ActiveMenu": "models",
 	}
 	c.Render(w, r, "admin/llm_model_form", data)
@@ -88,6 +92,7 @@ func (c *LLMProviderCtrl) Create(w http.ResponseWriter, r *http.Request) {
 		MaxInputTokens:  maxIn,
 		MaxOutputTokens: maxOut,
 		IsAuto:          r.FormValue("is_auto") == "1",
+		Capabilities:    buildCapabilities(r),
 		ReasoningEffort: r.FormValue("reasoning_effort"),
 	}
 
@@ -122,12 +127,15 @@ func (c *LLMProviderCtrl) EditForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"Title":      "编辑模型",
-		"Action":     "/admin/models/" + chi.URLParam(r, "id"),
-		"Method":     "PUT",
-		"FormModel":  m,
-		"AdminPage":  true,
-		"ActiveMenu": "models",
+		"Title":       "编辑模型",
+		"Action":      "/admin/models/" + chi.URLParam(r, "id"),
+		"Method":      "PUT",
+		"FormModel":   m,
+		"HasVision":   m.HasCapability("vision"),
+		"HasImageGen": m.HasCapability("image_gen"),
+		"HasTools":    m.HasCapability("tools"),
+		"AdminPage":   true,
+		"ActiveMenu":  "models",
 	}
 	c.Render(w, r, "admin/llm_model_form", data)
 }
@@ -158,6 +166,7 @@ func (c *LLMProviderCtrl) Update(w http.ResponseWriter, r *http.Request) {
 		MaxInputTokens:  maxIn,
 		MaxOutputTokens: maxOut,
 		IsAuto:          &isAuto,
+		Capabilities:    buildCapabilities(r),
 		ReasoningEffort: r.FormValue("reasoning_effort"),
 	}
 
@@ -186,10 +195,6 @@ func (c *LLMProviderCtrl) Delete(w http.ResponseWriter, r *http.Request) {
 		common.JSONError(w, http.StatusNotFound, "模型不存在")
 		return
 	}
-	if m.IsDefault {
-		common.JSONError(w, http.StatusBadRequest, "请先解除默认设置再删除")
-		return
-	}
 
 	if err := c.Service.Delete(uint(id)); err != nil {
 		common.JSONError(w, http.StatusInternalServerError, "删除模型失败")
@@ -200,25 +205,6 @@ func (c *LLMProviderCtrl) Delete(w http.ResponseWriter, r *http.Request) {
 	slog.Info("管理员操作:删除模型", "operator", operator.Username, "model_id", m.ModelID)
 
 	common.JSONSuccess(w, nil)
-}
-
-// SetDefault 将指定模型设为全局默认模型
-func (c *LLMProviderCtrl) SetDefault(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseUint(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		common.JSONError(w, http.StatusBadRequest, "无效的 ID")
-		return
-	}
-
-	if err := c.Service.SetDefault(uint(id)); err != nil {
-		common.JSONError(w, http.StatusInternalServerError, "设置默认模型失败")
-		return
-	}
-
-	operator := middleware.GetCurrentAdmin(r)
-	slog.Info("管理员操作:设置默认模型", "operator", operator.Username, "model_id", id)
-
-	common.JSONSuccess(w, map[string]interface{}{"id": id})
 }
 
 // ToggleAuto 切换模型的自动切换参与状态
@@ -266,6 +252,7 @@ func (c *LLMProviderCtrl) Export(w http.ResponseWriter, r *http.Request) {
 			MaxInputTokens:  models[i].MaxInputTokens,
 			MaxOutputTokens: models[i].MaxOutputTokens,
 			IsAuto:          models[i].IsAuto,
+			Capabilities:    models[i].Capabilities,
 			ReasoningEffort: models[i].ReasoningEffort,
 		})
 	}
@@ -311,6 +298,7 @@ func (c *LLMProviderCtrl) Import(w http.ResponseWriter, r *http.Request) {
 			MaxInputTokens:  item.MaxInputTokens,
 			MaxOutputTokens: item.MaxOutputTokens,
 			IsAuto:          item.IsAuto,
+			Capabilities:    item.Capabilities,
 			ReasoningEffort: item.ReasoningEffort,
 		})
 	}
@@ -360,4 +348,72 @@ func (c *LLMProviderCtrl) TestConnect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	common.JSONSuccess(w, map[string]string{"status": "ok", "content": content})
+}
+
+// FetchModels 获取上游可用模型列表
+func (c *LLMProviderCtrl) FetchModels(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+
+	var baseURL, apiKey, protocol string
+
+	if idStr != "" {
+		// 从已有模型读取配置
+		id, err := strconv.ParseUint(idStr, 10, 64)
+		if err != nil {
+			common.JSONError(w, http.StatusBadRequest, "无效的 ID")
+			return
+		}
+		m, err := c.Service.GetByID(uint(id))
+		if err != nil {
+			common.JSONError(w, http.StatusNotFound, "模型不存在")
+			return
+		}
+		baseURL = m.BaseURL
+		apiKey = c.Service.DecryptAPIKey(m)
+		protocol = m.Protocol
+	} else {
+		// 从请求体读取配置
+		var req struct {
+			BaseURL  string `json:"base_url"`
+			APIKey   string `json:"api_key"`
+			Protocol string `json:"protocol"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			common.JSONError(w, http.StatusBadRequest, "参数解析失败")
+			return
+		}
+		if req.BaseURL == "" || req.APIKey == "" || req.Protocol == "" {
+			common.JSONError(w, http.StatusBadRequest, "base_url、api_key、protocol 不能为空")
+			return
+		}
+		baseURL = req.BaseURL
+		apiKey = req.APIKey
+		protocol = req.Protocol
+	}
+
+	models, err := c.Service.FetchUpstreamModels(baseURL, apiKey, protocol)
+	if err != nil {
+		common.JSONError(w, http.StatusBadGateway, "获取上游模型失败: "+err.Error())
+		return
+	}
+
+	common.JSONSuccess(w, models)
+}
+
+// buildCapabilities 从表单 checkbox 构建逗号分隔的能力字符串
+func buildCapabilities(r *http.Request) string {
+	var caps []string
+	if r.FormValue("cap_vision") == "1" {
+		caps = append(caps, "vision")
+	}
+	if r.FormValue("cap_image_gen") == "1" {
+		caps = append(caps, "image_gen")
+	}
+	if r.FormValue("cap_tools") == "1" {
+		caps = append(caps, "tools")
+	}
+	if len(caps) == 0 {
+		return "tools"
+	}
+	return strings.Join(caps, ",")
 }

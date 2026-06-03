@@ -205,46 +205,6 @@ func (s *IndexerService) ScanWorkspace(workspaceID uint, rootDir string) (*ScanR
 	return result, nil
 }
 
-// UpdateKeywords 为缺少关键词的索引调用 LLM 提取（批量）
-func (s *IndexerService) UpdateKeywords(workspaceID uint, rootDir string, extractor KeywordExtractor, batchSize int) (int, error) {
-	var indexes []model.FileIndex
-	s.DB.Where("workspace_id = ? AND keywords = ''", workspaceID).
-		Limit(batchSize).Find(&indexes)
-
-	if len(indexes) == 0 {
-		return 0, nil
-	}
-
-	updated := 0
-	for _, idx := range indexes {
-		fullPath := filepath.Join(rootDir, filepath.FromSlash(idx.FilePath))
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
-		}
-
-		// 截断过长内容
-		text := string(content)
-		if len(text) > 4000 {
-			text = text[:4000] + "\n...(已截断)"
-		}
-
-		result, err := extractor.Extract(idx.FilePath, idx.Language, text)
-		if err != nil {
-			slog.Warn("关键词提取失败", "file", idx.FilePath, "error", err)
-			continue
-		}
-
-		s.DB.Model(&model.FileIndex{}).Where("id = ?", idx.ID).Updates(map[string]interface{}{
-			"keywords": result.Keywords,
-			"summary":  result.Summary,
-		})
-		updated++
-	}
-
-	return updated, nil
-}
-
 // GetIndexByWorkspace 获取工作区的所有索引
 func (s *IndexerService) GetIndexByWorkspace(workspaceID uint) ([]model.FileIndex, error) {
 	var indexes []model.FileIndex
@@ -281,17 +241,6 @@ func (s *IndexerService) SearchByKeywords(workspaceID uint, keywords []string) (
 	var indexes []model.FileIndex
 	err := query.Order("file_path ASC").Limit(50).Find(&indexes).Error
 	return indexes, err
-}
-
-// KeywordExtractor 关键词提取器接口（由 LLM 实现）
-type KeywordExtractor interface {
-	Extract(filePath, language, content string) (*KeywordResult, error)
-}
-
-// KeywordResult 关键词提取结果
-type KeywordResult struct {
-	Keywords string // 逗号分隔的关键词
-	Summary  string // 文件摘要
 }
 
 // --- 内部辅助函数 ---

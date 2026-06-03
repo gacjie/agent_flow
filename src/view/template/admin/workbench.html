@@ -91,18 +91,57 @@
 .wb-status-notice::before { content: '⏳'; }
 
 /* 输入区 */
-.wb-input-area { border-top: 1px solid var(--border); padding: 0.5rem 1.25rem 0.75rem; display: flex; flex-direction: column; gap: 0.375rem; background: var(--bg-base); flex-shrink: 0; }
-.wb-input-selectors { display: flex; gap: 0.5rem; align-items: center; }
+.wb-input-area { border-top: 1px solid var(--border); padding: 0.5rem 1.25rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; background: var(--bg-base); flex-shrink: 0; }
+
+/* 附件预览区（顶部） */
+.wb-attach-preview { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0; }
+.wb-attach-preview:empty { display: none; }
+.wb-attach-item { position: relative; border: 1px solid var(--border); border-radius: 0.5rem; overflow: hidden; display: flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.5rem; background: var(--bg-surface); font-size: 0.78rem; }
+.wb-attach-item img { width: 36px; height: 36px; object-fit: cover; border-radius: 0.25rem; }
+.wb-attach-item .wb-attach-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.wb-attach-remove { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-error); color: #fff; border: none; cursor: pointer; font-size: 10px; line-height: 16px; text-align: center; display: none; }
+.wb-attach-item:hover .wb-attach-remove { display: block; }
+
+/* 输入框区域（中间） */
+.wb-input-textarea-wrap { display: flex; }
+.wb-input-textarea-wrap textarea { flex: 1; resize: none; border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.625rem 0.875rem; font-size: 0.9rem; line-height: 1.5; min-height: calc(0.9rem * 1.5 * 3 + 1.25rem); max-height: 400px; background: var(--bg-surface); color: var(--text-primary); font-family: inherit; transition: border-color 0.2s; overflow-y: auto; }
+.wb-input-textarea-wrap textarea:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+
+/* 底部行 */
+.wb-input-bottom { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.wb-input-bottom-left { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.wb-input-bottom-right { display: flex; align-items: center; gap: 0.5rem; }
+
+/* 选择器 */
 .wb-input-select { padding: 0.25rem 0.5rem; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 0.375rem; background: var(--bg-surface); color: var(--text-primary); max-width: 200px; cursor: pointer; }
 .wb-input-select:focus { outline: none; border-color: var(--color-primary); }
-.wb-input-row { display: flex; gap: 0.75rem; align-items: flex-end; }
-.wb-input-row textarea { flex: 1; resize: none; border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.625rem 0.875rem; font-size: 0.9rem; min-height: 44px; max-height: 150px; background: var(--bg-surface); color: var(--text-primary); font-family: inherit; transition: border-color 0.2s; }
-.wb-input-row textarea:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
-.wb-send-btn { padding: 0.625rem 1.25rem; background: var(--color-primary); color: white; border: none; border-radius: 0.75rem; cursor: pointer; font-size: 0.875rem; font-weight: 500; white-space: nowrap; transition: background 0.2s; }
+
+/* 操作按钮 */
+.wb-action-btn { background: none; border: 1px solid var(--border); border-radius: 0.375rem; padding: 0.375rem; cursor: pointer; color: var(--text-secondary); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+.wb-action-btn:hover { color: var(--color-primary); border-color: var(--color-primary); background: var(--bg-surface); }
+.wb-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.wb-action-btn.loading { animation: pulse 1s infinite; }
+
+/* 发送/停止按钮 */
+.wb-send-btn { padding: 0.5rem 1.25rem; background: var(--color-primary); color: white; border: none; border-radius: 0.75rem; cursor: pointer; font-size: 0.875rem; font-weight: 500; white-space: nowrap; transition: background 0.2s; }
 .wb-send-btn:hover { background: var(--color-primary-hover); }
 .wb-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .wb-send-btn.wb-stop-btn { background: var(--color-danger, #ef4444); }
 .wb-send-btn.wb-stop-btn:hover { background: #dc2626; }
+
+/* 消息中的附件卡片 */
+.wb-msg-attachments { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.wb-msg-attach-card { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--bg-surface); font-size: 0.78rem; cursor: pointer; text-decoration: none; color: var(--text-secondary); max-width: 220px; transition: border-color 0.15s; }
+.wb-msg-attach-card:hover { border-color: var(--color-primary); }
+.wb-msg-attach-image img { width: 40px; height: 40px; object-fit: cover; border-radius: 0.25rem; flex-shrink: 0; }
+.wb-msg-attach-icon { font-size: 1.25rem; flex-shrink: 0; }
+.wb-msg-attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.wb-msg-attach-file { color: var(--text-secondary); }
+.wb-msg-attach-file:hover { color: var(--color-primary); }
+/* Lightbox 全屏预览 */
+.wb-lightbox { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.wb-lightbox-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.75); }
+.wb-lightbox-img { position: relative; max-width: 90vw; max-height: 90vh; border-radius: 0.5rem; object-fit: contain; box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
 .wb-message-stopped { color: var(--text-muted); font-style: italic; }
 
 /* 空状态 */
@@ -263,8 +302,9 @@
     .wb-mobile-toggle { display: block; }
     .wb-messages { padding: 1rem; }
     .wb-input-area { padding: 0.375rem 0.5rem 0.5rem; }
-    .wb-input-selectors { flex-wrap: wrap; }
-    .wb-input-select { max-width: 150px; }
+    .wb-input-bottom { flex-wrap: wrap; }
+    .wb-input-bottom-left { flex-wrap: wrap; }
+    .wb-input-select { max-width: 140px; }
     .wb-toolbar { padding: 0.375rem 0.75rem; }
     .wb-task-panel { position: fixed; top: 3.5rem; right: -320px; width: 300px; height: calc(100vh - 3.5rem); z-index: 200; box-shadow: var(--shadow-md); transition: right 0.25s ease; }
     .wb-task-panel.wb-task-open { right: 0; }
@@ -296,6 +336,9 @@
             </button>
             <button id="wb-toggle-files" class="wb-toolbar-btn" title="项目文件" style="display:none;">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button id="wb-toggle-uploads" class="wb-toolbar-btn" title="附件" style="display:none;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             </button>
             <span id="wb-toolbar-ws-info" style="font-size:0.8rem;color:var(--text-muted);"></span>
         </div>
@@ -347,26 +390,37 @@
 
             <!-- 底部输入区 -->
             <div class="wb-input-area">
-                <div class="wb-input-selectors" id="wb-input-selectors">
-                    <select id="wb-sel-agent" class="wb-input-select" title="选择智能体">
-                        <option value="">选择智能体</option>
-                        {{range .Agents}}
-                        <option value="{{.ID}}" data-model-id="{{.ModelID}}" data-model-mode="{{.ModelMode}}">{{.Title}}{{if .Description}} — {{.Description}}{{end}}</option>
-                        {{end}}
-                    </select>
-                    <select id="wb-sel-model" class="wb-input-select" title="选择模型">
-                        <option value="auto">自动切换</option>
-                        <option value="default">默认模型</option>
-                        {{range .Models}}
-                        <option value="{{.ModelID}}">{{.Name}}</option>
-                        {{end}}
-                    </select>
-                    <span id="wb-conv-tokens" class="wb-token-badge"></span>
+                <div id="wb-attach-preview" class="wb-attach-preview"></div>
+                <div class="wb-input-textarea-wrap">
+                    <textarea id="wb-input" placeholder="请先在左侧选择工作区..." rows="3"></textarea>
                 </div>
-                <div class="wb-input-row">
-                    <textarea id="wb-input" placeholder="请先在左侧选择工作区..." rows="1"></textarea>
-                    <button id="wb-btn-send" class="wb-send-btn" disabled>发送</button>
+                <div class="wb-input-bottom">
+                    <div class="wb-input-bottom-left">
+                        <select id="wb-sel-agent" class="wb-input-select" title="选择智能体">
+                            <option value="">选择智能体</option>
+                            {{range .Agents}}
+                            <option value="{{.ID}}" data-model-id="{{.ModelID}}" data-model-mode="{{.ModelMode}}">{{.Title}}{{if .Description}} — {{.Description}}{{end}}</option>
+                            {{end}}
+                        </select>
+                        <select id="wb-sel-model" class="wb-input-select" title="选择模型">
+                            <option value="auto">自动切换</option>
+                            {{range .Models}}
+                            <option value="{{.ModelID}}">{{.Name}}</option>
+                            {{end}}
+                        </select>
+                        <span id="wb-conv-tokens" class="wb-token-badge"></span>
+                        <button type="button" id="wb-btn-upload" class="wb-action-btn" title="上传图片/文件">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                        </button>
+                    </div>
+                    <div class="wb-input-bottom-right">
+                        <button type="button" id="wb-btn-enhance" class="wb-action-btn" title="提示词增强">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                        </button>
+                        <button id="wb-btn-send" class="wb-send-btn" disabled>发送</button>
+                    </div>
                 </div>
+                <input type="file" id="wb-file-input" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.pdf,.txt,.md" multiple style="display:none">
             </div>
         </div>
 
@@ -426,6 +480,18 @@
             </div>
             <div id="wb-files-list" class="wb-files-list">
                 <div class="wb-empty" style="padding:2rem 0;"><span>暂无文件</span></div>
+            </div>
+        </div>
+
+        <!-- 右侧附件面板 -->
+        <div id="wb-uploads-panel" class="wb-docs-panel wb-hidden">
+            <div class="wb-resize-handle"></div>
+            <div class="wb-docs-header">
+                <h3>附件</h3>
+                <button id="wb-uploads-close" class="wb-docs-close" title="关闭">&times;</button>
+            </div>
+            <div id="wb-uploads-list" class="wb-docs-list">
+                <div class="wb-empty" style="padding:2rem 0;"><span>暂无附件</span></div>
             </div>
         </div>
     </div>
@@ -491,7 +557,6 @@ var WB_CONFIG = {
     isRunning: {{if .IsRunning}}true{{else}}false{{end}},
     lastSeq: {{if .LastSeq}}{{.LastSeq}}{{else}}0{{end}},
     csrfToken: '{{.CSRFToken}}',
-    defaultModelId: '{{.DefaultModelID}}',
     agents: [{{range .Agents}}{ id: {{.ID}}, name: '{{.Name}}', title: '{{.Title}}', description: '{{.Description}}', modelId: '{{.ModelID}}' },{{end}}],
     models: [{{range .Models}}{ id: {{.ID}}, name: '{{.Name}}', modelId: '{{.ModelID}}', protocol: '{{.Protocol}}' },{{end}}],
     hasProject: {{if .Workspace}}{{if .Workspace.Project.Path}}true{{else}}false{{end}}{{else}}false{{end}}

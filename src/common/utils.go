@@ -94,3 +94,22 @@ func BindForm(r *http.Request) (map[string]string, error) {
 	}
 	return result, nil
 }
+
+// BuildAPIURL 拼接 API 地址（base_url + 端点路径）。
+// 自动去重：若 base_url 已含版本前缀且 path 以相同前缀开头，不重复拼接。
+func BuildAPIURL(baseURL, path string) string {
+	base := strings.TrimRight(baseURL, "/")
+	if path == "" {
+		return base
+	}
+	if path[0] != '/' {
+		path = "/" + path
+	}
+	prefixes := []string{"/v1beta", "/v1"}
+	for _, prefix := range prefixes {
+		if strings.HasSuffix(base, prefix) && strings.HasPrefix(path, prefix) {
+			return base + path[len(prefix):]
+		}
+	}
+	return base + path
+}

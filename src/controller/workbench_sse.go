@@ -25,10 +25,11 @@ func (c *WorkbenchCtrl) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	// 解析请求体（LastSeq 用于重连时指定回放起点，0 表示从最早可用事件开始）
 	var req struct {
-		Message     string `json:"message"`
-		AgentID     uint   `json:"agent_id"`
-		WorkspaceID uint   `json:"workspace_id"`
-		LastSeq     int    `json:"last_seq"`
+		Message     string             `json:"message"`
+		AgentID     uint               `json:"agent_id"`
+		WorkspaceID uint               `json:"workspace_id"`
+		LastSeq     int                `json:"last_seq"`
+		Attachments []model.Attachment `json:"attachments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "参数解析失败", http.StatusBadRequest)
@@ -141,6 +142,7 @@ func (c *WorkbenchCtrl) SendMessage(w http.ResponseWriter, r *http.Request) {
 			WorkDir:        workDir,
 			ProjectPath:    projectPath,
 			UserMessage:    req.Message,
+			Attachments:    req.Attachments,
 		}
 		mgr.Start(sk, c.ChatRunner, runCfg)
 	}

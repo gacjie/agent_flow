@@ -135,12 +135,18 @@ func (s *ChatService) DeleteConversation(id uint) error {
 
 // SaveMessage 保存单条消息
 func (s *ChatService) SaveMessage(conversationID uint, role, content string, toolCalls []provider.ToolCall, toolCallID string, reasoningContent string, tokenCount int, agentName string) (*model.ChatMessage, error) {
+	return s.SaveMessageWithAttachments(conversationID, role, content, toolCalls, toolCallID, reasoningContent, tokenCount, agentName, "")
+}
+
+// SaveMessageWithAttachments 保存消息（含附件 JSON）
+func (s *ChatService) SaveMessageWithAttachments(conversationID uint, role, content string, toolCalls []provider.ToolCall, toolCallID string, reasoningContent string, tokenCount int, agentName string, attachments string) (*model.ChatMessage, error) {
 	msg := &model.ChatMessage{
 		ConversationID:   conversationID,
 		Role:             role,
 		Content:          content,
 		ReasoningContent: reasoningContent,
 		ToolCallID:       toolCallID,
+		Attachments:      attachments,
 		TokenCount:       tokenCount,
 		AgentName:        agentName,
 	}

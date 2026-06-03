@@ -13,10 +13,20 @@ import (
 type Message struct {
 	Role             string        `json:"role"`                        // system/user/assistant/tool
 	Content          string        `json:"content"`                     // 文本内容
+	ContentParts     []ContentPart `json:"content_parts,omitempty"`     // 多模态内容（非空时优先于 Content）
 	ReasoningContent string        `json:"reasoning_content,omitempty"` // 推理/思考内容（多轮对话需回传）
 	ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`        // assistant 返回的工具调用
 	ToolCallID       string        `json:"tool_call_id,omitempty"`      // tool 消息的调用 ID
 	SystemBlocks     []SystemBlock `json:"-"`                           // 结构化系统提示词（仅 system 角色消息使用，Claude 分块缓存）
+}
+
+// ContentPart 多模态内容块
+type ContentPart struct {
+	Type      string `json:"type"`                 // "text" | "image"
+	Text      string `json:"text,omitempty"`       // type=text 时的文本内容
+	MediaType string `json:"media_type,omitempty"` // type=image 时的 MIME 类型（image/png, image/jpeg 等）
+	Data      string `json:"data,omitempty"`       // type=image 时的 base64 编码数据
+	Path      string `json:"path,omitempty"`       // type=image 时的文件路径（相对于工作区，用于前端展示）
 }
 
 // SystemBlock 系统提示词分块（供支持分块缓存的 API 使用）

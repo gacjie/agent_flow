@@ -15,7 +15,7 @@ func (t *BrowserActionTool) Description() string {
 	return `控制 headless 浏览器查看和操作网页。浏览器会话在多次调用间保持（空闲 5 分钟自动关闭）。
 支持的 action：
 - navigate: 打开 URL，返回结构化页面状态 JSON（默认含 page_frame / structured_snapshot / REF:rN / validation / key_texts）
-- screenshot: 截图保存到工作区目录，返回文件路径
+- screenshot: 对当前页面截图，截图图片将以视觉内容返回供分析（同时保存到工作区 screenshots/ 目录，可在附件面板查看）
 - click: 点击指定 CSS 选择器或 REF:rN 引用的元素
 - type: 在指定输入框中输入文本，支持 CSS 选择器或 REF:rN 引用
 - scroll: 滚动页面
@@ -114,8 +114,16 @@ func (t *BrowserActionTool) Execute(ctx context.Context, args string) *Result {
 		content, isErr := browsers.ExecuteStructured(sessionKey, &p, workspaceDir)
 		return &Result{Content: content, IsError: isErr}
 	case "screenshot":
-		content, isErr := browsers.DoScreenshot(sessionKey, workspaceDir)
-		return &Result{Content: content, IsError: isErr}
+		sr := browsers.DoScreenshot(sessionKey, workspaceDir)
+		result := &Result{Content: sr.Message, IsError: sr.IsError}
+		if !sr.IsError && sr.Data != "" {
+			result.Images = []ImageData{{
+				Path:      sr.FilePath,
+				MediaType: "image/png",
+				Data:      sr.Data,
+			}}
+		}
+		return result
 	default:
 		return ErrorResult("未知 action: " + p.Action + "（支持: navigate/screenshot/click/type/scroll/evaluate/clear_cache）")
 	}
