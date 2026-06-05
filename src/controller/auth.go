@@ -143,3 +143,43 @@ func (c *Auth) renderLoginError(w http.ResponseWriter, r *http.Request, msg stri
 	w.WriteHeader(http.StatusUnauthorized)
 	c.Render(w, r, "auth/login", data)
 }
+
+// APILogin APP 专用 JSON 登录接口，返回 API Token
+func (c *Auth) APILogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := common.BindJSON(r, &req); err != nil || req.Username == "" || req.Password == "" {
+		common.JSONError(w, http.StatusBadRequest, "用户名和密码不能为空")
+		return
+	}
+	admin, err := c.AuthService.LoginForAPI(req.Username, req.Password, r.RemoteAddr)
+	if err != nil {
+		msg := "用户名或密码错误"
+		if appErr, ok := err.(*common.AppError); ok {
+			msg = appErr.Message
+		}
+		common.JSONError(w, http.StatusUnauthorized, msg)
+		return
+	}
+	token, err := c.AuthService.CreateAPIToken(admin.ID, "mobile-app")
+	if err != nil {
+		common.JSONError(w, http.StatusInternalServerError, "Token 创建失败")
+		return
+	}
+	common.JSONSuccess(w, map[string]interface{}{
+		"token":      token,
+		"admin_name": admin.Nickname,
+		"expires_at": time.Now().Add(90 * 24 * time.Hour),
+	})
+}
+
+// APILogout APP 专用登出接口，吊销 API Token
+func (c *Auth) APILogout(w http.ResponseWriter, r *http.Request) {
+	auth := r.Header.Get("Authorization")
+	if len(auth) > 7 {
+		c.AuthService.RevokeAPIToken(auth[7:])
+	}
+	common.JSONSuccess(w, nil)
+}

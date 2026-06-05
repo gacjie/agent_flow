@@ -1,0 +1,8 @@
+{
+  "name": "agentflow-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "@dcloudio/uni-app": "*",
+    "vue": "^3.2.45"
+  }
+}

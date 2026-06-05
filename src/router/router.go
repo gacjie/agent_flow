@@ -116,6 +116,12 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 		PromptEnhanceService: promptEnhanceService,
 	}
 
+	// ========== APP API 路由（豁免 CSRF）==========
+	r.Route("/api/auth", func(r chi.Router) {
+		r.Post("/login", authCtrl.APILogin)
+		r.Post("/logout", authCtrl.APILogout)
+	})
+
 	// ========== Web 页面路由 ==========
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.CORS())
@@ -255,6 +261,7 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 					r.With(middleware.RequirePermission("workbench.create")).Post("/conversations/{id}/stop", workbenchCtrl.StopConversation)
 					r.With(middleware.RequirePermission("workbench.create")).Delete("/conversations/{id}", workbenchCtrl.DeleteConversation)
 					r.With(middleware.RequirePermission("workbench.create")).Post("/workspaces", workbenchCtrl.CreateWorkspace)
+					r.With(middleware.RequirePermission("workbench.view")).Get("/workspaces", workbenchCtrl.ListWorkspaces)
 					r.With(middleware.RequirePermission("workbench.view")).Get("/tasks", workbenchCtrl.ListTasks)
 					r.With(middleware.RequirePermission("workbench.view")).Get("/docs", workbenchCtrl.ListDocs)
 					r.With(middleware.RequirePermission("workbench.view")).Get("/docs/content", workbenchCtrl.ReadDoc)

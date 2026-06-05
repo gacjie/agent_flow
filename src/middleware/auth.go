@@ -90,6 +90,13 @@ func GetPermissions(r *http.Request) map[string]bool {
 
 // getAdminFromCookie 从 Cookie 读取 session token 并验证（含 IP 校验）
 func getAdminFromCookie(r *http.Request, authService *service.AuthService) *model.Admin {
+	// 1. Bearer Token（APP，无 IP 校验）
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		if admin, err := authService.ValidateAPIToken(auth[7:]); err == nil {
+			return admin
+		}
+	}
+	// 2. Cookie Session（浏览器，含 IP 校验）
 	cookie, err := r.Cookie(common.SessionCookieName)
 	if err != nil || cookie.Value == "" {
 		return nil

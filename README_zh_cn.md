@@ -8,6 +8,13 @@
 
 开箱即用的 AI 智能体工作流系统。基于 Go 语言构建，单二进制部署，内嵌前端界面和 SQLite 数据库。
 
+## 赞助商
+
+| | 赞助商 | 说明 |
+|--|--------|------|
+| 🖥️ | [服务器商名称](https://example.com) | 服务器推荐语 |
+| 🔑 | [API中转站名称](https://example.com) | API中转站推荐语 |
+
 ## 特性
 
 - **多智能体编排** — 内置智能体 + 自定义创建，支持角色/规则/工作流/技能/记忆配置
@@ -18,6 +25,7 @@
 - **分阶段任务管理** — 将复杂工作拆解为带依赖关系的分阶段任务
 - **项目与工作区隔离** — 每个工作区拥有独立数据库和文件目录
 - **RBAC 权限控制** — 基于角色的权限系统，34 个权限节点
+- **移动客户端** — 基于 UniApp 的 Android/H5 客户端，支持 SSE 流式对话和多服务器管理
 - **日夜双主题** — 原生 CSS/JS 前端，支持明暗主题切换
 - **零依赖部署** — 单二进制文件，无需外部运行时
 
@@ -27,6 +35,9 @@
 ┌─────────────────────────────────────────────────────────┐
 │                       前端层                             │
 │         原生 CSS/JS + html/template + go:embed           │
+├─────────────────────────────────────────────────────────┤
+│                    移动客户端（APP）                      │
+│        UniApp (Vue 3) — Android / H5 / iOS              │
 ├─────────────────────────────────────────────────────────┤
 │                      HTTP 层                             │
 │        Chi v5 路由 + 中间件栈（CSRF、认证、               │
@@ -56,6 +67,7 @@
 | 路由 | chi/v5 |
 | ORM | GORM（纯 Go SQLite 驱动） |
 | 前端 | 原生 CSS/JS、html/template、go:embed |
+| 移动端 | UniApp (Vue 3) — Android / H5 |
 | 配置 | Viper（YAML + 环境变量） |
 | 日志 | slog（标准库） |
 
@@ -70,6 +82,10 @@ agent_flow/
 │   ├── agents/                 # 内置智能体定义（agent.yaml + 提示词文件）
 │   ├── skills/                 # 内置技能（Markdown 文件）
 │   └── prompt/                 # 系统提示词模板
+├── app/                        # 移动客户端（UniApp + Vue 3）
+│   ├── pages/                  # 页面（服务器列表、登录、工作台、对话、任务）
+│   ├── utils/                  # API 封装、SSE 处理、本地存储管理
+│   └── manifest.json           # 应用配置（平台/权限/版本）
 └── src/
     ├── common/                 # 公共工具（响应/错误/加密/校验）
     ├── config/                 # 配置结构体 + 加载器
@@ -144,6 +160,17 @@ agent_flow/
 3. **Specs** — 工作区规格文档（`workspace/{uuid}/specs/`）
 4. **Role** — 智能体专属提示词（role/rule/workflow/skill/memory）
 5. **Task Summary** — 当前阶段任务概览
+
+### 移动客户端
+
+基于 UniApp (Vue 3) 开发的移动客户端，支持 Android 和 H5 平台。
+
+- **多服务器管理** — 连接多个 AgentFlow 实例，自由切换
+- **SSE 流式对话** — 实时接收 AI 回复，支持断线自动重连（`last_seq` 续传）
+- **完整对话 UI** — 支持文本、思考过程、工具调用、工具结果、代码块等多种消息类型展示
+- **工作区与任务** — 浏览工作区、管理会话、查看任务进度
+- **跨平台** — 一套代码同时产出 Android APP 和 H5 网页版，可扩展至 iOS
+- **Token 认证** — 通过 API 登录，Token 按服务器本地持久化
 
 ## 快速开始
 
@@ -244,6 +271,17 @@ WantedBy=multi-user.target
 - **Anthropic** — Claude 模型，支持 Prompt Caching
 - **Gemini** — Google Gemini 模型
 - **OpenAI Responses** — OpenAI Responses API 格式
+
+### 移动客户端编译
+
+`app/` 目录为移动客户端源码，使用 [HBuilderX](https://www.dcloud.io/hbuilderx.html) 打开并编译：
+
+1. 用 HBuilderX 打开 `app/` 目录
+2. 服务器地址在 APP 中动态配置（支持运行时添加多个服务器）
+3. 编译目标平台：
+   - **Android** — 通过 HBuilderX 云打包或本地打包
+   - **H5** — `npm run build` 产出 Web 版本
+4. APK 产物输出至 `app/unpackage/release/apk/`
 
 ## 截图
 

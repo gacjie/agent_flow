@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"strings"
 
 	"agent_flow/src/common"
 )
@@ -35,6 +36,12 @@ func CSRF(next http.Handler) http.Handler {
 
 		// 安全方法（GET/HEAD/OPTIONS）跳过校验
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Bearer Token 请求跳过 CSRF（Token 本身防 CSRF）
+		if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 			next.ServeHTTP(w, r)
 			return
 		}

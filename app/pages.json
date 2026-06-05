@@ -1,0 +1,14 @@
+{
+  "pages": [
+    { "path": "pages/index/index", "style": { "navigationBarTitleText": "服务器列表" } },
+    { "path": "pages/login/login", "style": { "navigationBarTitleText": "登录" } },
+    { "path": "pages/workbench/workbench", "style": { "navigationBarTitleText": "工作台" } },
+    { "path": "pages/chat/chat", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/tasks/tasks", "style": { "navigationBarTitleText": "任务" } }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarBackgroundColor": "#2b5ce6",
+    "backgroundColor": "#f5f7fa"
+  }
+}

@@ -4,6 +4,13 @@
 
 An out-of-the-box AI agent workflow system built with Go. Single binary deployment with embedded frontend and SQLite database.
 
+## Sponsors
+
+| | Sponsor | Description |
+|--|---------|-------------|
+| 🖥️ | [服务器商名称](https://example.com) | 服务器推荐语 |
+| 🔑 | [API中转站名称](https://example.com) | API中转站推荐语 |
+
 ## Highlights
 
 - **Multi-Agent Orchestration** — Built-in agents + custom agent creation with role/rule/workflow/skill/memory configuration
@@ -14,6 +21,7 @@ An out-of-the-box AI agent workflow system built with Go. Single binary deployme
 - **Phased Task Management** — Break down complex work into phased tasks with dependencies
 - **Project & Workspace Isolation** — Each workspace has its own database and file directory
 - **RBAC Access Control** — Role-based permission system with 34 permission nodes
+- **Mobile Client** — UniApp-based Android/H5 client with SSE streaming and multi-server management
 - **Light/Dark Theme** — Native CSS/JS frontend with dual-theme support
 - **Zero Dependencies** — Single binary, no external runtime required
 
@@ -23,6 +31,9 @@ An out-of-the-box AI agent workflow system built with Go. Single binary deployme
 ┌─────────────────────────────────────────────────────────┐
 │                      Frontend                           │
 │         Native CSS/JS + html/template + go:embed        │
+├─────────────────────────────────────────────────────────┤
+│                  Mobile Client (APP)                     │
+│       UniApp (Vue 3) — Android / H5 / iOS              │
 ├─────────────────────────────────────────────────────────┤
 │                    HTTP Layer                            │
 │        Chi v5 Router + Middleware Stack (CSRF,          │
@@ -52,6 +63,7 @@ An out-of-the-box AI agent workflow system built with Go. Single binary deployme
 | Router | chi/v5 |
 | ORM | GORM (pure-Go SQLite driver) |
 | Frontend | Native CSS/JS, html/template, go:embed |
+| Mobile | UniApp (Vue 3) — Android / H5 |
 | Config | Viper (YAML + env vars) |
 | Logging | slog (stdlib) |
 
@@ -66,6 +78,10 @@ agent_flow/
 │   ├── agents/                 # Built-in agent definitions (agent.yaml + prompt files)
 │   ├── skills/                 # Built-in skills (markdown files)
 │   └── prompt/                 # System prompt templates
+├── app/                        # Mobile client (UniApp + Vue 3)
+│   ├── pages/                  # Pages (server list, login, workbench, chat, tasks)
+│   ├── utils/                  # API client, SSE handler, storage management
+│   └── manifest.json           # App configuration (platforms/permissions/version)
 └── src/
     ├── common/                 # Shared utilities (response/errors/crypto/validation)
     ├── config/                 # Config struct + loader
@@ -140,6 +156,17 @@ The unified AI interaction interface where you select a workspace and agent, the
 3. **Specs** — Workspace specification documents (`workspace/{uuid}/specs/`)
 4. **Role** — Agent-specific prompts (role/rule/workflow/skill/memory)
 5. **Task Summary** — Current phase task overview
+
+### Mobile Client
+
+Native mobile client built with UniApp (Vue 3), supporting Android and H5 platforms.
+
+- **Multi-server Management** — Connect to multiple AgentFlow instances, switch between them freely
+- **SSE Streaming** — Real-time AI response streaming with auto-reconnection (supports `last_seq` resume)
+- **Full Conversation UI** — Displays text, reasoning blocks, tool calls, tool results, and code blocks
+- **Workspace & Task View** — Browse workspaces, manage conversations, and monitor task progress
+- **Cross-platform** — Single codebase for Android APP and H5 web, iOS extensible
+- **Bearer Token Auth** — Login via API, token persisted locally per server
 
 ## Quick Start
 
@@ -240,6 +267,17 @@ After first login, navigate to **System → LLM Models** to add your LLM provide
 - **Anthropic** — Claude models with prompt caching support
 - **Gemini** — Google Gemini models
 - **OpenAI Responses** — OpenAI Responses API format
+
+### Mobile Client Build
+
+The `app/` directory contains the mobile client source code. Use [HBuilderX](https://www.dcloud.io/hbuilderx.html) to open and build:
+
+1. Open the `app/` directory in HBuilderX
+2. Configure the server address in the app (supports adding multiple servers at runtime)
+3. Build for target platform:
+   - **Android** — Cloud build or local build via HBuilderX
+   - **H5** — `npm run build` for web deployment
+4. The built APK is output to `app/unpackage/release/apk/`
 
 ## Screenshots
 

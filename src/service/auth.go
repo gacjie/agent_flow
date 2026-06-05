@@ -235,3 +235,79 @@ func (s *AuthService) CleanExpiredSessions() {
 		slog.Info("清理过期 Session", "count", result.RowsAffected)
 	}
 }
+
+// LoginForAPI 验证用户名密码，返回 Admin（不创建 Session，供 API Token 登录使用）
+func (s *AuthService) LoginForAPI(username, password, ip string) (*model.Admin, error) {
+	s.mu.Lock()
+	info := s.attempts[username]
+	cfg := config.Get()
+	lockDur := time.Duration(cfg.Auth.LockDuration) * time.Minute
+	if info != nil && !info.LockedAt.IsZero() && time.Now().Before(info.LockedAt.Add(lockDur)) {
+		remaining := time.Until(info.LockedAt.Add(lockDur)).Minutes()
+		s.mu.Unlock()
+		return nil, common.NewError(http.StatusTooManyRequests,
+			fmt.Sprintf("登录失败次数过多，请 %.0f 分钟后重试", remaining+1))
+	}
+	s.mu.Unlock()
+
+	var admin model.Admin
+	if err := s.DB.Preload("Role").Where("username = ? AND deleted_at IS NULL", username).First(&admin).Error; err != nil {
+		s.recordFailure(username, ip)
+		return nil, common.NewError(http.StatusUnauthorized, "用户名或密码错误")
+	}
+	if admin.Status != 1 {
+		return nil, common.NewError(http.StatusForbidden, "账号已被禁用")
+	}
+	if !common.CheckPassword(password, admin.Password) {
+		s.recordFailure(username, ip)
+		return nil, common.NewError(http.StatusUnauthorized, "用户名或密码错误")
+	}
+	s.mu.Lock()
+	delete(s.attempts, username)
+	s.mu.Unlock()
+	return &admin, nil
+}
+func (s *AuthService) CreateAPIToken(adminID uint, name string) (string, error) {
+	token, err := common.GenerateToken(common.SessionTokenLen)
+	if err != nil {
+		return "", common.NewError(http.StatusInternalServerError, "Token 生成失败")
+	}
+	t := &model.APIToken{
+		Token:     token,
+		AdminID:   adminID,
+		Name:      name,
+		ExpiresAt: time.Now().Add(90 * 24 * time.Hour),
+	}
+	if err := s.DB.Create(t).Error; err != nil {
+		return "", common.NewError(http.StatusInternalServerError, "Token 创建失败")
+	}
+	return token, nil
+}
+
+// ValidateAPIToken 验证 API Token（不做 IP 校验）
+func (s *AuthService) ValidateAPIToken(token string) (*model.Admin, error) {
+	if token == "" {
+		return nil, common.ErrUnauthorized
+	}
+	var t model.APIToken
+	if err := s.DB.Where("token = ?", token).First(&t).Error; err != nil {
+		return nil, common.ErrUnauthorized
+	}
+	if t.IsExpired() {
+		s.DB.Delete(&t)
+		return nil, common.ErrUnauthorized
+	}
+	var admin model.Admin
+	if err := s.DB.Preload("Role").First(&admin, t.AdminID).Error; err != nil {
+		return nil, common.ErrUnauthorized
+	}
+	if admin.Status != 1 {
+		return nil, common.NewError(http.StatusForbidden, "账号已被禁用")
+	}
+	return &admin, nil
+}
+
+// RevokeAPIToken 吊销 API Token
+func (s *AuthService) RevokeAPIToken(token string) {
+	s.DB.Where("token = ?", token).Delete(&model.APIToken{})
+}

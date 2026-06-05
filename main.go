@@ -81,6 +81,8 @@ func main() {
 		// 工具系统（system_tools: 内置工具，mcp_tools: MCP工具）
 		&model.SystemTool{},
 		&model.MCPTool{},
+		// APP API Token
+		&model.APIToken{},
 	); err != nil {
 		slog.Error("数据库迁移失败", "error", err)
 		os.Exit(1)

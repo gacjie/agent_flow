@@ -89,3 +89,13 @@ func (c *WorkbenchCtrl) ListTasks(w http.ResponseWriter, r *http.Request) {
 		"task_summary_tokens": taskSummaryTokens,
 	})
 }
+
+// ListWorkspaces APP 专用：列出所有进行中的工作区
+func (c *WorkbenchCtrl) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
+	workspaces, err := c.WorkspaceService.ListActive()
+	if err != nil {
+		common.JSONError(w, http.StatusInternalServerError, "获取工作区失败")
+		return
+	}
+	common.JSONSuccess(w, workspaces)
+}
