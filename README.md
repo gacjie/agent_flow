@@ -8,9 +8,9 @@ An out-of-the-box AI agent workflow system built with Go. Single binary deployme
 
 | | Sponsor | Description |
 |--|---------|-------------|
-| 🖥️ | [服务器商名称](https://example.com) | 服务器推荐语 |
-| 🔑 | [API中转站名称](https://example.com) | API中转站推荐语 |
-
+| 🖥️ | [弘速云](https://www.hosuyun.cn) | 香港高性能云服 8核8G 19.9/月 |
+| 🔑 | [Synai996 AI Gateway](https://synai996.space) | 稳定接入 Claude、GPT、Gemini、DeepSeek 等主流模型 |
+| 🔑 | [刀哥 AI Gateway](https://www.codexapis.com) | 高速稳定的GPT Codex Pro 号池API |
 ## Highlights
 
 - **Multi-Agent Orchestration** — Built-in agents + custom agent creation with role/rule/workflow/skill/memory configuration
