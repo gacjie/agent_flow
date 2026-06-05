@@ -43,8 +43,8 @@ pagination:
 
 app:
   name: "AgentFlow"
-  version: "1.1.0"
-  secret_key: "7391c6974142f9d55a9c70c1fc8752e6cb096b2aa0a380dd2b419279d80af2cd"               # AES-256 加密密钥（留空则首次启动自动生成）
+  version: "1.1.2"
+  secret_key: ""               # AES-256 加密密钥（留空则首次启动自动生成）
 
 agent:
   context_root: "./context"    # 系统级上下文目录

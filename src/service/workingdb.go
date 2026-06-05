@@ -79,11 +79,6 @@ func (m *WorkingDBManager) GetDB(workspaceUUID string) (*gorm.DB, error) {
 	// SQLite 性能优化
 	database.OptimizeSQLite(newDB)
 
-	// 清理软删除数据（迁移：从软删除切换到硬删除）
-	for _, t := range []string{"conversations", "chat_messages", "tasks"} {
-		newDB.Exec("DELETE FROM " + t + " WHERE deleted_at IS NOT NULL")
-	}
-
 	// 自动迁移 Conversation、ChatMessage、Task 表
 	if err := newDB.AutoMigrate(&model.Conversation{}, &model.ChatMessage{}, &model.Task{}); err != nil {
 		return nil, fmt.Errorf("working.db 迁移失败: %w", err)

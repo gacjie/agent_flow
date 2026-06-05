@@ -61,7 +61,7 @@ func (s *AuthService) Login(username, password, ip, userAgent string) (string, e
 	s.mu.Unlock()
 
 	var admin model.Admin
-	err := s.DB.Preload("Role").Where("username = ? AND deleted_at IS NULL", username).First(&admin).Error
+	err := s.DB.Preload("Role").Where("username = ?", username).First(&admin).Error
 	if err != nil {
 		s.recordFailure(username, ip)
 		return "", common.NewError(http.StatusUnauthorized, "用户名或密码错误")
@@ -251,7 +251,7 @@ func (s *AuthService) LoginForAPI(username, password, ip string) (*model.Admin, 
 	s.mu.Unlock()
 
 	var admin model.Admin
-	if err := s.DB.Preload("Role").Where("username = ? AND deleted_at IS NULL", username).First(&admin).Error; err != nil {
+	if err := s.DB.Preload("Role").Where("username = ?", username).First(&admin).Error; err != nil {
 		s.recordFailure(username, ip)
 		return nil, common.NewError(http.StatusUnauthorized, "用户名或密码错误")
 	}
