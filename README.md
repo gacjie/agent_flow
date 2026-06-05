@@ -281,10 +281,13 @@ The `app/` directory contains the mobile client source code. Use [HBuilderX](htt
 
 ## Screenshots
 
-> Screenshots will be added soon.
+### Web Workbench
 
-<!-- ![Workbench](screenshots/workbench.png) -->
-<!-- ![Dashboard](screenshots/dashboard.png) -->
+![Web Workbench](agent_flow_web_demo.png)
+
+### Mobile Client
+
+![Mobile Client](agent_flow_app_demo.jpg)
 
 ## License
 

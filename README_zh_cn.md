@@ -285,10 +285,13 @@ WantedBy=multi-user.target
 
 ## 截图
 
-> 截图即将添加。
+### Web 工作台
 
-<!-- ![工作台](screenshots/workbench.png) -->
-<!-- ![仪表盘](screenshots/dashboard.png) -->
+![Web 工作台](agent_flow_web_demo.png)
+
+### 移动客户端
+
+![移动客户端](agent_flow_app_demo.jpg)
 
 ## 许可证
 
