@@ -5,7 +5,7 @@ keywords: 任务规划,WBS,工作分解,依赖分析,优先级,关键路径,任�
 model_id: auto
 model_mode: auto
 icon: ""
-sort: 3
+sort: 14
 status: 1
 auto_load_files:
   - role

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"agent_flow/src/agentctx"
+	"agent_flow/src/tokenutil"
 	"agent_flow/src/common"
 )
 
@@ -33,7 +33,7 @@ func buildDocFile(name, path, scope string, info os.FileInfo, dir string) docFil
 	var tokens int
 	if info.Size() > 0 && info.Size() <= 1<<20 {
 		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
-			tokens = agentctx.EstimateTokens(string(data))
+			tokens = tokenutil.EstimateText(string(data))
 		}
 	}
 	return docFile{

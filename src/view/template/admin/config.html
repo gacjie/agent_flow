@@ -48,6 +48,13 @@
                 {{end}}
                 {{end}}
             </select>
+            {{else if eq .Type "select"}}
+            {{$curVal := .Value}}
+            <select name="config_{{.Key}}" class="select">
+                {{range jsonOptions .Options}}
+                <option value="{{index . "value"}}" {{if eq (index . "value") $curVal}}selected{{end}}>{{index . "label"}}</option>
+                {{end}}
+            </select>
             {{else}}
             <input type="text" name="config_{{.Key}}" value="{{.Value}}" class="input">
             {{end}}

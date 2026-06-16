@@ -5,7 +5,7 @@ keywords: 前端,HTML,CSS,JavaScript,模板,样式,交互,响应式,双主题,XS
 model_id: auto
 model_mode: auto
 icon: ""
-sort: 5
+sort: 25
 status: 1
 auto_load_files:
   - role

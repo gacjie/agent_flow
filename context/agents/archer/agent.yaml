@@ -5,7 +5,7 @@ keywords: 架构,技术规范,命名约定,API契约,错误码,状态码,AGENTS.
 model_id: auto
 model_mode: auto
 icon: ""
-sort: 2
+sort: 11
 status: 1
 auto_load_files:
   - role

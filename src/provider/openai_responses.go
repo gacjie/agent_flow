@@ -30,10 +30,14 @@ func NewOpenAIResponsesClient(cfg ProviderConfig) *OpenAIResponsesClient {
 		timeout = cfg.Timeout
 	}
 	baseDur := time.Duration(timeout) * time.Second
+	streamIdle := baseDur * 5 / 2
+	if cfg.StreamIdleTimeout > 0 {
+		streamIdle = time.Duration(cfg.StreamIdleTimeout) * time.Second
+	}
 	return &OpenAIResponsesClient{
 		cfg:               cfg,
 		timeout:           baseDur,
-		streamIdleTimeout: baseDur * 5 / 2,
+		streamIdleTimeout: streamIdle,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				TLSHandshakeTimeout:   15 * time.Second,
@@ -41,6 +45,10 @@ func NewOpenAIResponsesClient(cfg ProviderConfig) *OpenAIResponsesClient {
 			},
 		},
 	}
+}
+
+func (c *OpenAIResponsesClient) DoubleStreamIdleTimeout() {
+	c.streamIdleTimeout *= 2
 }
 
 // ---- Responses API 请求/响应结构 ----
@@ -422,8 +430,15 @@ func (c *OpenAIResponsesClient) readSSE(resp *http.Response, ch chan<- Chunk) {
 					Message string `json:"message"`
 				} `json:"error"`
 			}
-			if json.Unmarshal([]byte(data), &evt) == nil && evt.Error.Code == "rate_limit_exceeded" {
-				ch <- Chunk{Error: &APIError{StatusCode: 429, Message: evt.Error.Message}, Done: true}
+			if json.Unmarshal([]byte(data), &evt) == nil {
+				switch evt.Error.Code {
+				case "rate_limit_exceeded":
+					ch <- Chunk{Error: &APIError{StatusCode: 429, Message: evt.Error.Message}, Done: true}
+				case "server_error":
+					ch <- Chunk{Error: &APIError{StatusCode: 500, Message: evt.Error.Message}, Done: true}
+				default:
+					ch <- Chunk{Error: fmt.Errorf("OpenAI Responses SSE 错误: %s", data), Done: true}
+				}
 			} else {
 				ch <- Chunk{Error: fmt.Errorf("OpenAI Responses SSE 错误: %s", data), Done: true}
 			}

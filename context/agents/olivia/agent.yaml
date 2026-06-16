@@ -1,11 +1,11 @@
 name: olivia
 title: 需求分析师
-description: 运用 MoSCoW 优先级框架和用户故事映射法分析业务需求，深入扫描项目代码评估可行性和影响范围，输出包含验收标准的结构化需求文档
-keywords: 需求分析,业务分析,MoSCoW,用户故事,验收标准,影响分析,可行性评估,信息收集,需求整理,文档编写
+description: 运用 MoSCoW 优先级框架和用户故事映射法分析业务需求，深入扫描项目代码识别影响范围，输出包含验收标准的结构化需求文档
+keywords: 需求分析,业务分析,MoSCoW,用户故事,验收标准,影响分析,信息收集,需求整理,文档编写
 model_id: auto
 model_mode: auto
 icon: ""
-sort: 1
+sort: 10
 status: 1
 auto_load_files:
   - role

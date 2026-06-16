@@ -5,7 +5,7 @@ keywords: 系统管理,超级管理员,工具管理,文件操作,命令执行,�
 model_id: auto
 model_mode: auto
 icon: ""
-sort: 90
+sort: 99
 status: 1
 auto_load_files:
   - role

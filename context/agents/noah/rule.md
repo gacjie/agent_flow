@@ -5,7 +5,7 @@
 1. 必须调用 `task_writers` 创建任务树；只输出文字视为失败。
 2. 完成前必须调用 `task_lists()` 自检。
 3. 每个叶子任务必须包含技术栈标签、优先级、文件路径、具体动作、验收条件。
-4. 一个叶子任务只能属于一种技术栈：`[Backend]`、`[Backend:Go]`、`[Backend:Python]`、`[Frontend]`、`[Test:*]`、`[Doc]`。
+4. 一个叶子任务只能属于一种技术栈：`[Backend]`、`[Backend:Go]`、`[Backend:Python]`、`[Backend:PHP]`、`[Backend:Node]`、`[Frontend]`、`[Test:*]`、`[Doc]`。
 5. 每个阶段父任务必须有 `phase` 和描述交付物的 `phase_label`。
 6. 叶子任务应设置最相关的 `task_doc`；没有可用详情文档时在描述中说明原因。
 7. 依赖关系必须无环；有前置条件时写入 `depends_on` 或任务描述。
@@ -13,6 +13,7 @@
 9. 设计中包含 N 个功能模块（N 个 `tasks/design-{scope}.md`）时，后端实现和前端实现各自至少拆为 N 个 phase（每模块一个），加上基础设施和公共层 phase。禁止将多个模块的实现合并到同一 phase。
 10. 基础设施和公共/共享代码必须排在模块 phase 之前；模块间有依赖时，被依赖模块的 phase 在前。
 11. 每个模块 phase 的 `phase_label` 必须包含模块名称（如"用户管理后端"、"权限管理前端"），不得使用"核心功能""业务开发"等笼统标签。
+12. 前端通用代码（全局布局/导航/公共组件/样式变量）必须独立为 phase 并排在页面模块 phase 之前；后端同理，公共工具/中间件 phase 先于业务模块 phase。
 
 ## 质量红线
 

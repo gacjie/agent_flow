@@ -5,7 +5,7 @@ keywords: Go,Golang,后端,API,Chi,Gin,GORM,防御性编程,参数化查询,错�
 model_id: auto
 model_mode: auto
 icon: ""
-sort: 4
+sort: 20
 status: 1
 auto_load_files:
   - role

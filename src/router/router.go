@@ -71,6 +71,10 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 		ConfigGetter: configService,
 		ModelGetter:  modelService,
 	})
+	// 注册网络搜索工具（需要 ConfigGetter 依赖，支持多搜索引擎切换）
+	toolRegistry.Register(&tool.WebSearchTool{
+		ConfigGetter: configService,
+	})
 
 	// 静态文件服务
 	staticFS, _ := fs.Sub(view.StaticFS, "static")
@@ -261,6 +265,7 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 					r.With(middleware.RequirePermission("workbench.create")).Post("/conversations/{id}/stop", workbenchCtrl.StopConversation)
 					r.With(middleware.RequirePermission("workbench.create")).Delete("/conversations/{id}", workbenchCtrl.DeleteConversation)
 					r.With(middleware.RequirePermission("workbench.create")).Post("/workspaces", workbenchCtrl.CreateWorkspace)
+					r.With(middleware.RequirePermission("workbench.create")).Delete("/workspaces/{id}", workbenchCtrl.DeleteWorkspace)
 					r.With(middleware.RequirePermission("workbench.view")).Get("/workspaces", workbenchCtrl.ListWorkspaces)
 					r.With(middleware.RequirePermission("workbench.view")).Get("/tasks", workbenchCtrl.ListTasks)
 					r.With(middleware.RequirePermission("workbench.view")).Get("/docs", workbenchCtrl.ListDocs)

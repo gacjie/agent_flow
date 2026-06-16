@@ -20,12 +20,13 @@ import (
 	"agent_flow/src/service"
 	"agent_flow/src/tool"
 	"agent_flow/src/view"
-
-	"gorm.io/gorm"
 )
 
 func main() {
-	// 1. 加载配置
+	// 1. 确保配置文件存在并补全缺失字段
+	config.EnsureConfigFile("config/config.yaml", "config/default_config.yaml")
+
+	// 2. 加载配置
 	cfg, err := config.Load("config/config.yaml")
 	if err != nil {
 		slog.Error("配置加载失败", "error", err)
@@ -46,10 +47,7 @@ func main() {
 	}
 	defer database.Close()
 
-	// 4. 启动时清理软删除数据（迁移：从软删除切换到硬删除）
-	cleanSoftDeletes(database.Get())
-
-	// 4.1 迁移：将 "default" 模式统一为 "auto"
+	// 4. 迁移：将 "default" 模式统一为 "auto"
 	database.Get().Exec("UPDATE agents SET model_id = 'auto' WHERE model_id = 'default'")
 	database.Get().Exec("UPDATE agents SET model_mode = 'auto' WHERE model_mode = 'default'")
 
@@ -282,6 +280,9 @@ func seedData(cfg *config.AppConfig) {
 		{Key: "ai.vision_model", Value: "", Label: "视觉解析模型", Group: "AI 服务", Type: "model_select", Sort: 1},
 		{Key: "ai.image_gen_model", Value: "", Label: "图片生成模型", Group: "AI 服务", Type: "model_select", Sort: 2},
 		{Key: "ai.prompt_enhance_model", Value: "auto", Label: "提示词增强模型", Group: "AI 服务", Type: "model_select", Sort: 3},
+		{Key: "search.engine", Value: "auto", Label: "搜索引擎", Group: "搜索", Type: "select", Options: `[{"value":"auto","label":"自动切换（SearXNG→Jina→DuckDuckGo）"},{"value":"searxng","label":"SearXNG"},{"value":"jina","label":"Jina AI"},{"value":"duckduckgo","label":"DuckDuckGo"}]`, Sort: 1},
+		{Key: "search.searxng_url", Value: "https://search.inetol.net", Label: "SearXNG 实例地址", Group: "搜索", Type: "text", Sort: 2},
+		{Key: "search.jina_api_key", Value: "", Label: "Jina API Key（可选，提高额度）", Group: "搜索", Type: "text", Sort: 3},
 	}
 	for _, c := range configs {
 		db.Where("`key` = ?", c.Key).FirstOrCreate(&c)
@@ -366,14 +367,3 @@ func initLogger(cfg config.LogConfig) *applogger.DailyFileHandler {
 	return fileHandler
 }
 
-// cleanSoftDeletes 清理主库中被软删除的记录（迁移：从软删除切换到硬删除）
-func cleanSoftDeletes(db *gorm.DB) {
-	tables := []string{
-		"admins", "sessions", "roles", "permissions", "role_permissions",
-		"sys_configs", "llm_models", "skills", "agents", "agent_skills",
-		"projects", "workspaces", "file_indexes", "system_tools", "mcp_tools",
-	}
-	for _, t := range tables {
-		db.Exec(fmt.Sprintf("DELETE FROM %s WHERE deleted_at IS NOT NULL", t))
-	}
-}

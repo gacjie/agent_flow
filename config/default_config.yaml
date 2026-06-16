@@ -1,0 +1,61 @@
+# AgentFlow 默认配置文件
+# 请复制为 config.yaml 后修改，系统优先读取 config.yaml
+# 首次启动时若 config.yaml 不存在，将自动从此文件复制生成
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "debug"            # debug | release
+  read_timeout: 15         # 读超时（秒）
+  write_timeout: 300       # 写超时（秒）— SSE 流式响应需要长连接
+  idle_timeout: 60         # 空闲超时（秒）
+  shutdown_timeout: 10     # 优雅关闭超时（秒）
+
+database:
+  driver: "sqlite"
+  dsn: "data.db"
+  max_idle_conns: 10
+  max_open_conns: 100
+
+log:
+  level: "debug"  # debug | info | warn | error
+  format: "text"  # text | json
+  error_log_dir: "logs/error"  # 错误日志目录（warn+error 按天轮转写入文件）
+
+auth:
+  session_max_age: 86400     # Session 有效期（秒），默认 24 小时
+  cookie_secure: false       # 生产环境 HTTPS 下设为 true
+  cookie_http_only: true     # 禁止 JS 读取 Cookie
+  admin_user: "admin"        # 默认管理员用户名
+  admin_password: "admin123" # 默认管理员密码（首次登录后请修改）
+  max_login_attempts: 5      # 最大登录失败次数
+  lock_duration: 15          # 锁定时长（分钟）
+  session_cache_ttl: 300     # Session 缓存 TTL（秒）
+  captcha_ttl: 300           # 验证码有效期（秒）
+  min_password_length: 8     # 最小密码长度
+
+cors:
+  allowed_origins: ["http://localhost:8080"]
+  allowed_methods: "GET, POST, PUT, DELETE, OPTIONS"
+  allowed_headers: "Content-Type, Authorization, X-Requested-With, X-CSRF-Token"
+
+pagination:
+  default_page_size: 20     # 默认每页条数
+  max_page_size: 100        # 最大每页条数
+
+app:
+  name: "AgentFlow"
+  secret_key: ""               # AES-256 加密密钥（留空则首次启动自动生成）
+
+agent:
+  context_root: "./context"    # 系统级上下文目录
+  project_root: "./project"    # 项目根目录
+  working_root: "./workspace"  # 工作区根目录（每个工作区在此目录下创建 UUID 子目录）
+  system_root: "./system"      # 系统目录（工具+系统角色）
+  max_iterations: 50           # 工具调用自检间隔轮数（每 N 轮触发死循环检查，默认 50）
+  tidy_keep_rounds: 5          # 上下文整理时保留最近对话轮数（默认 5）
+
+llm:
+  timeout: 120                 # LLM API 请求超时（秒）
+  max_retries: 2               # 最大重试次数
+  stream_idle_timeout: 300     # SSE 流空闲超时（秒），默认 300，0 表示使用 timeout*2.5

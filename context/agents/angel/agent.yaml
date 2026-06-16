@@ -1,0 +1,17 @@
+name: angel
+title: 通用助手
+description: 通用日常助手，可以完成任何任务——开发、分析、搜索、文件操作、命令执行、网页浏览、文档编写等，不参与编排流程，独立完成用户交办的任何工作
+keywords: 通用,助手,开发,分析,搜索,文件,命令,脚本,自动化,浏览器,文档,工具
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 1
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - all

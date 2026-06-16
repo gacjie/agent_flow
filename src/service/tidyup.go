@@ -41,11 +41,12 @@ type TidyUpRelayResult struct {
 
 // tidyResponse LLM 返回的整理结果 JSON 结构
 type tidyResponse struct {
-	WorkSummary     string       `json:"work_summary"`      // 历史工作内容总结
-	NextSteps       string       `json:"next_steps"`        // 后续工作说明
-	RelevantContext string       `json:"relevant_context"`  // 与后续工作相关的上下文信息
-	TaskUpdates   []taskUpdate          `json:"task_updates"`   // 任务状态更新（副作用，不注入新会话）
-	MemoryUpdates []tool.MemoryUpdateItem `json:"memory_updates"` // 记忆更新（副作用，不注入新会话）
+	WorkSummary         string                  `json:"work_summary"`          // 历史工作内容总结
+	NextSteps           string                  `json:"next_steps"`            // 后续工作说明
+	RelevantContext     string                  `json:"relevant_context"`      // 与后续工作相关的上下文信息
+	OriginalRequirement string                  `json:"original_requirement"`  // 用户原始需求（跨接力保留）
+	TaskUpdates         []taskUpdate            `json:"task_updates"`          // 任务状态更新（副作用，不注入新会话）
+	MemoryUpdates       []tool.MemoryUpdateItem `json:"memory_updates"`        // 记忆更新（副作用，不注入新会话）
 }
 
 // taskUpdate LLM 返回的任务状态更新
@@ -308,6 +309,7 @@ func buildTidyUserPrompt(phaseLabel, systemPrompt, taskList, formattedMessages, 
 	sb.WriteString("2. 在 next_steps 中明确后续工作的具体步骤和方案\n")
 	sb.WriteString("3. 根据对话中的实际工作更新任务状态\n")
 	sb.WriteString("4. 如有工具调用出错、踩坑等经验教训，填写 memory_updates（支持追加/修改/删除，参考当前记忆避免重复）\n")
+	sb.WriteString("5. 在 original_requirement 中保留用户原始需求（如对话首条是上下文整理摘要，从「用户原始需求」章节原样复制；否则从第一条 user 消息中提取）\n")
 
 	return sb.String()
 }
@@ -426,6 +428,12 @@ func renderTidyNode(sb *strings.Builder, t model.Task, childMap map[uint][]model
 // buildRelaySummary 构建注入新会话的摘要文本（只包含对话上下文部分，不含副作用操作）
 func buildRelaySummary(resp *tidyResponse) string {
 	var sb strings.Builder
+
+	if resp.OriginalRequirement != "" {
+		sb.WriteString("## 用户原始需求\n\n")
+		sb.WriteString(resp.OriginalRequirement)
+		sb.WriteString("\n\n")
+	}
 
 	if resp.WorkSummary != "" {
 		sb.WriteString("## 已完成工作\n\n")

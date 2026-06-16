@@ -5,7 +5,7 @@ keywords: 系统设计,架构设计,技术方案,模块设计,接口设计,关�
 model_id: auto
 model_mode: auto
 icon: ""
-sort: 2
+sort: 12
 status: 1
 auto_load_files:
   - role

@@ -28,10 +28,14 @@ func NewGeminiClient(cfg ProviderConfig) *GeminiClient {
 		timeout = cfg.Timeout
 	}
 	baseDur := time.Duration(timeout) * time.Second
+	streamIdle := baseDur * 5 / 2
+	if cfg.StreamIdleTimeout > 0 {
+		streamIdle = time.Duration(cfg.StreamIdleTimeout) * time.Second
+	}
 	return &GeminiClient{
 		cfg:               cfg,
 		timeout:           baseDur,
-		streamIdleTimeout: baseDur * 5 / 2,
+		streamIdleTimeout: streamIdle,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				TLSHandshakeTimeout:   15 * time.Second,
@@ -39,6 +43,10 @@ func NewGeminiClient(cfg ProviderConfig) *GeminiClient {
 			},
 		},
 	}
+}
+
+func (c *GeminiClient) DoubleStreamIdleTimeout() {
+	c.streamIdleTimeout *= 2
 }
 
 // ---- Gemini API 请求/响应结构 ----
@@ -387,9 +395,12 @@ func (c *GeminiClient) readSSE(resp *http.Response, ch chan<- Chunk) {
 		}
 
 		if gResp.Error != nil {
-			if gResp.Error.Code == 429 {
+			switch gResp.Error.Code {
+			case 429:
 				ch <- Chunk{Error: &APIError{StatusCode: 429, Message: gResp.Error.Message}, Done: true}
-			} else {
+			case 500, 502, 503:
+				ch <- Chunk{Error: &APIError{StatusCode: gResp.Error.Code, Message: gResp.Error.Message}, Done: true}
+			default:
 				ch <- Chunk{Error: fmt.Errorf("Gemini API 错误: %s", gResp.Error.Message), Done: true}
 			}
 			return

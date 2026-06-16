@@ -2,6 +2,7 @@ package view
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -46,6 +47,13 @@ func NewEngine() (*Engine, error) {
 					s = append(s, i)
 				}
 				return s
+			},
+			"jsonOptions": func(s string) []map[string]string {
+				var opts []map[string]string
+				if s != "" {
+					json.Unmarshal([]byte(s), &opts)
+				}
+				return opts
 			},
 		},
 	}

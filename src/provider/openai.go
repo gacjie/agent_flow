@@ -31,10 +31,14 @@ func NewOpenAIClient(cfg ProviderConfig) *OpenAIClient {
 		timeout = cfg.Timeout
 	}
 	baseDur := time.Duration(timeout) * time.Second
+	streamIdle := baseDur * 5 / 2
+	if cfg.StreamIdleTimeout > 0 {
+		streamIdle = time.Duration(cfg.StreamIdleTimeout) * time.Second
+	}
 	return &OpenAIClient{
 		cfg:               cfg,
 		timeout:           baseDur,
-		streamIdleTimeout: baseDur * 5 / 2, // 流式空闲超时 = 2.5x（如 120s→300s）
+		streamIdleTimeout: streamIdle,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				TLSHandshakeTimeout:   15 * time.Second,
@@ -42,6 +46,10 @@ func NewOpenAIClient(cfg ProviderConfig) *OpenAIClient {
 			},
 		},
 	}
+}
+
+func (c *OpenAIClient) DoubleStreamIdleTimeout() {
+	c.streamIdleTimeout *= 2
 }
 
 // ---- OpenAI API 请求/响应结构 ----

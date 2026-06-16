@@ -248,6 +248,27 @@
         });
     }
 
+    // -- 删除工作区 --
+
+    var wbBtnDeleteWs = $('wb-btn-delete-workspace');
+    if (wbBtnDeleteWs && WB_CONFIG.workspaceId) {
+        wbBtnDeleteWs.style.display = '';
+        wbBtnDeleteWs.addEventListener('click', function() {
+            if (!confirm('确定要删除当前工作区吗？此操作不可撤销，将删除该工作区所有会话和工作文件（不影响关联项目）。')) return;
+            apiRequest('/admin/workbench/workspaces/' + WB_CONFIG.workspaceId, {
+                method: 'DELETE'
+            }).then(function(resp) {
+                if (resp.code === 0) {
+                    window.location.href = '/admin/workbench';
+                } else {
+                    alert(resp.message || '删除失败');
+                }
+            }).catch(function() {
+                alert('网络错误，请重试');
+            });
+        });
+    }
+
     // -- 移动端侧边栏切换 --
 
     if (wbToggleSidebar) {
@@ -992,7 +1013,7 @@
             function onMove(ev) {
                 var delta = startX - ev.clientX;
                 var newWidth = Math.min(maxWidth, Math.max(minWidth, startWidth + delta));
-                panel.style.width = newWidth + 'px';
+                document.documentElement.style.setProperty('--wb-panel-width', newWidth + 'px');
             }
             function onUp() {
                 document.removeEventListener('mousemove', onMove);
@@ -1000,7 +1021,7 @@
                 e.target.classList.remove('wb-resizing');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
-                try { localStorage.setItem('wb_panel_width', panel.offsetWidth); } catch(ex) {}
+                try { localStorage.setItem('wb_panel_width', parseInt(getComputedStyle(document.documentElement).getPropertyValue('--wb-panel-width'))); } catch(ex) {}
             }
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
@@ -1318,10 +1339,16 @@
 
     // -- 消息加载和显示 --
 
-    function updateConvTokens(tokens) {
+    function updateConvTokens(tokens, source) {
         var el = $('wb-conv-tokens');
         if (!el) return;
-        el.textContent = (tokens && tokens > 0) ? '~' + formatTokens(tokens) + ' tokens' : '';
+        if (tokens && tokens > 0) {
+            var prefix = (source === 'estimate') ? '≈' : '~';
+            el.textContent = prefix + formatTokens(tokens) + ' tokens';
+            el.title = source === 'estimate' ? '估算值（API未返回用量）' : 'API返回值';
+        } else {
+            el.textContent = '';
+        }
     }
 
     function loadMessages(convId) {
@@ -1371,7 +1398,7 @@
                 toolCalls = m.tool_calls;
             }
             // assistant 消息无文本内容时跳过空气泡，仅渲染工具调用
-            if (m.role === 'assistant' && (!m.content || !m.content.trim())) {
+            if (m.role === 'assistant' && (!m.content || !m.content.trim()) && (!m.reasoning_content || !m.reasoning_content.trim())) {
                 if (toolCalls && toolCalls.length) {
                     for (var j = 0; j < toolCalls.length; j++) { appendToolCallBlock(toolCalls[j]); }
                 }
@@ -1383,7 +1410,7 @@
             } else if (Array.isArray(m.attachments)) {
                 attachments = m.attachments;
             }
-            appendMessage(m.role, m.content, toolCalls, m.agent_name, attachments);
+            appendMessage(m.role, m.content, toolCalls, m.agent_name, attachments, m.reasoning_content);
         }
         if (summary) {
             appendSummaryBlock(summary);
@@ -1418,18 +1445,28 @@
         return html;
     }
 
-    function appendMessage(role, content, toolCalls, agentName, attachments) {
+    function appendMessage(role, content, toolCalls, agentName, attachments, reasoningContent) {
         var div = document.createElement('div');
         div.className = 'wb-message wb-message-' + role;
         var avatar = (role === 'user') ? 'U' : 'A';
         var label  = (role === 'user') ? '你' : (agentName || 'AI');
+        var reasoningHtml = '';
+        if (reasoningContent && reasoningContent.trim()) {
+            reasoningHtml = '<div class="wb-reasoning wb-reasoning-done">' + escapeHtml(reasoningContent) + '</div>';
+        }
         var bubbleContent = escapeHtml(content || '');
         var attachHtml = buildAttachmentsHtml(attachments);
         div.innerHTML = '<div class="wb-message-avatar">' + avatar + '</div>' +
             '<div class="wb-message-body">' +
             '<div class="wb-message-role">' + escapeHtml(label) + '</div>' +
-            '<div class="wb-message-bubble">' + bubbleContent + attachHtml + '</div></div>';
+            '<div class="wb-message-bubble">' + reasoningHtml + bubbleContent + attachHtml + '</div></div>';
         wbMessages.appendChild(div);
+        var rBlock = div.querySelector('.wb-reasoning-done');
+        if (rBlock) {
+            rBlock.addEventListener('click', function() {
+                this.classList.toggle('wb-reasoning-expanded');
+            });
+        }
         if (toolCalls && toolCalls.length) {
             for (var i = 0; i < toolCalls.length; i++) { appendToolCallBlock(toolCalls[i]); }
         }
@@ -1697,12 +1734,12 @@
                 break;
             case 'token_update':
                 if (event.data && event.data.total_tokens) {
-                    updateConvTokens(event.data.total_tokens);
+                    updateConvTokens(event.data.total_tokens, event.data.source);
                 }
                 break;
             case 'done':
                 if (event.data && event.data.total_tokens) {
-                    updateConvTokens(event.data.total_tokens);
+                    updateConvTokens(event.data.total_tokens, event.data.source);
                 }
                 break;
             case 'stopped':

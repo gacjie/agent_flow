@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -16,6 +17,7 @@ import (
 	"agent_flow/src/config"
 	"agent_flow/src/model"
 	"agent_flow/src/provider"
+	"agent_flow/src/tokenutil"
 	"agent_flow/src/tool"
 )
 
@@ -241,21 +243,21 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 	if maxIterations > 200 {
 		maxIterations = 200
 	}
-	const maxRetries = 2  // 同一模型最多重试次数，超过后切换模型
+	const maxRetries = 2  // 已信任模型的最大重试次数，超过后切换模型
 	const maxSwitches = 3 // 连续模型切换上限，所有切换后的模型都失败则停止
 	rateLimitDelays := []time.Duration{10 * time.Second, 30 * time.Second, 60 * time.Second}
 	executor := tool.NewExecutor(r.ToolRegistry)
 	retryCount := 0     // 当前模型的连续失败次数
 	switchCount := 0    // 连续模型切换次数（成功后重置）
-	rateLimitRetry := 0 // 429 限速专用重试计数
+	rateLimitRetry := 0 // 429/529 限速/过载专用重试计数
+	modelTrusted := true // 初始模型默认信任；切换后的模型需成功一次才获得信任
 
 	toolRounds := 0
 	fileModCount := make(map[string]int) // 文件修改计数：path → 次数
 	consecutiveFails := 0                // 连续失败计数
 	const fileModThreshold = 5           // 同一文件修改 N 次触发自检
 	const failThreshold = 5              // 连续失败 N 次触发自检
-	var lastAPITokens int                // 上轮 API 返回的实际 token 数（精确值）
-	var lastMsgCount int                 // 上轮 LLM 调用后的消息数量（用于增量估算）
+	tokenTracker := tokenutil.NewTracker()
 
 	for totalLoops := 0; ; totalLoops++ {
 		// 检查 context 是否已取消（用户停止会话）
@@ -283,32 +285,15 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 
 		// 预检查：在 LLM 调用前检查 token 是否接近上限，超阈值则先整理
 		if r.TidyUpService != nil && currentModel.MaxInputTokens > 0 {
-			var estimated int
-			if lastAPITokens > 0 && lastMsgCount > 0 {
-				estimated = lastAPITokens
-				for i := lastMsgCount; i < len(sendMessages); i++ {
-					estimated += agentctx.EstimateTokens(sendMessages[i].Content)
-					estimated += agentctx.EstimateTokens(sendMessages[i].ReasoningContent)
-					for _, tc := range sendMessages[i].ToolCalls {
-						estimated += agentctx.EstimateTokens(tc.Arguments) + len(tc.Name)
-					}
-				}
-			} else {
-				estimated = estimateMessagesTokens(sendMessages)
-			}
+			tokenInfo := tokenTracker.EstimateCurrent(sendMessages, toolDefs)
 			threshold := currentModel.MaxInputTokens * 90 / 100
-			if estimated > threshold {
+			if tokenInfo.Tokens > threshold {
 				conv, _ := sessionSvc.GetConversation(cfg.ConversationID)
 				if conv != nil && conv.WorkspaceID > 0 {
 					slog.Info("token 超阈值，LLM 调用前触发整理",
-						"estimated", estimated, "threshold", threshold,
+						"estimated", tokenInfo.Tokens, "threshold", threshold,
 						"context_window", currentModel.MaxInputTokens,
-						"source", func() string {
-							if lastAPITokens > 0 {
-								return "api"
-							}
-							return "estimate"
-						}())
+						"source", string(tokenInfo.Source))
 					eventCh <- StreamEvent{Type: "content", Content: "\n\n---\n上下文 token 接近上限，正在整理...\n"}
 
 					var tidyOpts *TidyUpOptions
@@ -346,8 +331,7 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 								messages = append([]provider.Message{{Role: "system", Content: systemPrompt}}, messages...)
 							}
 						}
-						lastAPITokens = 0
-						lastMsgCount = 0
+						tokenTracker.Reset()
 						continue
 					} else if err != nil {
 						slog.Warn("预检整理失败，继续使用当前上下文", "error", err)
@@ -372,17 +356,41 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 
 		chunkCh, err := llmClient.ChatStream(ctx, sendMessages, opts)
 		if err != nil {
-			// 429 限速：独立延时重试
-			if provider.IsRateLimited(err) {
+			// Category C: 配置错误 (400/401/403/404) — 不重试，直接切换模型
+			if provider.IsPermanentError(err) {
+				if len(modelClients) > 1 && switchCount < maxSwitches {
+					switchCount++
+					retryCount = 0
+					rateLimitRetry = 0
+					modelTrusted = false
+					oldIdx := modelIdx
+					modelIdx = (modelIdx + 1) % len(modelClients)
+					llmClient = modelClients[modelIdx].Client
+					currentModel = modelClients[modelIdx].Model
+					slog.Warn("LLM 配置错误，切换模型",
+						"from", modelClients[oldIdx].Model.ModelID,
+						"to", currentModel.ModelID,
+						"switch", switchCount, "error", err)
+					eventCh <- StreamEvent{Type: "status", Content: fmt.Sprintf(
+						"模型 %s 不可用，切换到: %s (%d/%d)",
+						modelClients[oldIdx].Model.Name, currentModel.Name, switchCount, maxSwitches)}
+					continue
+				}
+				sendError(fmt.Sprintf("LLM 调用失败（配置错误）: %s", err.Error()))
+				return
+			}
+
+			// Category A: 限速/过载 (429/529) — 递增延迟重试
+			if provider.IsRateLimitOrOverloaded(err) {
 				if rateLimitRetry < len(rateLimitDelays) {
 					delay := rateLimitDelays[rateLimitRetry]
 					rateLimitRetry++
-					slog.Warn("LLM 限速(429)，延时重试",
+					slog.Warn("LLM 限速/过载，延时重试",
 						"model", currentModel.ModelID,
 						"attempt", rateLimitRetry, "max", len(rateLimitDelays),
 						"delay", delay, "error", err)
 					eventCh <- StreamEvent{Type: "status", Content: fmt.Sprintf(
-						"API 限速(429)，第 %d/%d 次重试，等待 %d 秒...",
+						"API 限速/过载，第 %d/%d 次重试，等待 %d 秒...",
 						rateLimitRetry, len(rateLimitDelays), int(delay.Seconds()))}
 					select {
 					case <-time.After(delay):
@@ -392,16 +400,16 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 					}
 					continue
 				}
-				// 429 重试耗尽：尝试切换模型
 				if len(modelClients) > 1 && switchCount < maxSwitches {
 					switchCount++
 					rateLimitRetry = 0
 					retryCount = 0
+					modelTrusted = false
 					oldIdx := modelIdx
 					modelIdx = (modelIdx + 1) % len(modelClients)
 					llmClient = modelClients[modelIdx].Client
 					currentModel = modelClients[modelIdx].Model
-					slog.Warn("LLM 限速(429)重试耗尽，切换模型",
+					slog.Warn("LLM 限速/过载重试耗尽，切换模型",
 						"from", modelClients[oldIdx].Model.ModelID,
 						"to", currentModel.ModelID,
 						"switch", switchCount, "max_switches", maxSwitches)
@@ -410,23 +418,52 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 						modelClients[oldIdx].Model.Name, currentModel.Name, switchCount, maxSwitches)}
 					continue
 				}
-				sendError(fmt.Sprintf("API 限速(429)，已重试 %d 次且无可切换模型: %s", rateLimitRetry, err.Error()))
+				sendError(fmt.Sprintf("API 限速/过载，已重试 %d 次且无可切换模型: %s", rateLimitRetry, err.Error()))
 				return
 			}
 
-			// 非 429 错误：原有通用重试逻辑
-			if retryCount < maxRetries {
+			// Category B: 瞬态错误 — 根据模型信任度决定重试次数
+			effectiveMax := maxRetries
+			if !modelTrusted {
+				effectiveMax = 0
+			}
+			if retryCount < effectiveMax {
 				retryCount++
-				slog.Warn("LLM 调用失败，重试中",
-					"model", currentModel.ModelID,
-					"retry", retryCount, "max", maxRetries,
-					"error", err)
+				// 超时错误：翻倍超时时间给模型更多时间
+				if errors.Is(err, provider.ErrIdleTimeout) {
+					if adj, ok := llmClient.(provider.TimeoutAdjustable); ok {
+						adj.DoubleStreamIdleTimeout()
+					}
+				}
+				// 502/503 短延迟
+				if provider.IsTransientServerError(err) {
+					slog.Warn("LLM 瞬态错误，等待后重试",
+						"model", currentModel.ModelID,
+						"retry", retryCount, "max", effectiveMax,
+						"delay", provider.TransientRetryDelay, "error", err)
+					eventCh <- StreamEvent{Type: "status", Content: fmt.Sprintf(
+						"服务暂时不可用，等待 %d 秒后重试 (%d/%d)...",
+						int(provider.TransientRetryDelay.Seconds()), retryCount, effectiveMax)}
+					select {
+					case <-time.After(provider.TransientRetryDelay):
+					case <-ctx.Done():
+						sendError("操作已取消")
+						return
+					}
+				} else {
+					slog.Warn("LLM 调用失败，重试中",
+						"model", currentModel.ModelID,
+						"retry", retryCount, "max", effectiveMax,
+						"error", err)
+				}
 				continue
 			}
-			// 已达重试上限，循环切换到下一个模型
+			// 重试耗尽或未信任模型首次失败 → 切换
 			if len(modelClients) > 1 && switchCount < maxSwitches {
 				switchCount++
 				retryCount = 0
+				rateLimitRetry = 0
+				modelTrusted = false
 				oldIdx := modelIdx
 				modelIdx = (modelIdx + 1) % len(modelClients)
 				llmClient = modelClients[modelIdx].Client
@@ -435,7 +472,7 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 					"from", modelClients[oldIdx].Model.ModelID,
 					"to", currentModel.ModelID,
 					"switch", switchCount, "max_switches", maxSwitches,
-					"error", err)
+					"trusted", modelTrusted, "error", err)
 				eventCh <- StreamEvent{Type: "status", Content: fmt.Sprintf("自动切换到模型: %s (%d/%d)", currentModel.Name, switchCount, maxSwitches)}
 				continue
 			}
@@ -465,17 +502,42 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 			}
 
 			if chunk.Error != nil {
-				// 429 限速：独立延时重试
-				if provider.IsRateLimited(chunk.Error) {
+				// Category C: 配置错误 (400/401/403/404) — 不重试，直接切换模型
+				if provider.IsPermanentError(chunk.Error) {
+					if len(modelClients) > 1 && switchCount < maxSwitches {
+						switchCount++
+						retryCount = 0
+						rateLimitRetry = 0
+						modelTrusted = false
+						oldIdx := modelIdx
+						modelIdx = (modelIdx + 1) % len(modelClients)
+						llmClient = modelClients[modelIdx].Client
+						currentModel = modelClients[modelIdx].Model
+						slog.Warn("流式响应配置错误，切换模型",
+							"from", modelClients[oldIdx].Model.ModelID,
+							"to", currentModel.ModelID,
+							"switch", switchCount, "error", chunk.Error)
+						eventCh <- StreamEvent{Type: "status", Content: fmt.Sprintf(
+							"模型 %s 不可用，切换到: %s (%d/%d)",
+							modelClients[oldIdx].Model.Name, currentModel.Name, switchCount, maxSwitches)}
+						streamErr = true
+						break
+					}
+					sendError(fmt.Sprintf("流式响应错误（配置错误）: %s", chunk.Error.Error()))
+					return
+				}
+
+				// Category A: 限速/过载 (429/529) — 递增延迟重试
+				if provider.IsRateLimitOrOverloaded(chunk.Error) {
 					if rateLimitRetry < len(rateLimitDelays) {
 						delay := rateLimitDelays[rateLimitRetry]
 						rateLimitRetry++
-						slog.Warn("流式响应限速(429)，延时重试",
+						slog.Warn("流式响应限速/过载，延时重试",
 							"model", currentModel.ModelID,
 							"attempt", rateLimitRetry, "max", len(rateLimitDelays),
 							"delay", delay)
 						eventCh <- StreamEvent{Type: "content", Content: fmt.Sprintf(
-							"\n[API 限速(429)，第 %d/%d 次重试，等待 %d 秒...]\n",
+							"\n[API 限速/过载，第 %d/%d 次重试，等待 %d 秒...]\n",
 							rateLimitRetry, len(rateLimitDelays), int(delay.Seconds()))}
 						select {
 						case <-time.After(delay):
@@ -486,16 +548,16 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 						streamErr = true
 						break
 					}
-					// 429 重试耗尽：尝试切换模型
 					if len(modelClients) > 1 && switchCount < maxSwitches {
 						switchCount++
 						rateLimitRetry = 0
 						retryCount = 0
+						modelTrusted = false
 						oldIdx := modelIdx
 						modelIdx = (modelIdx + 1) % len(modelClients)
 						llmClient = modelClients[modelIdx].Client
 						currentModel = modelClients[modelIdx].Model
-						slog.Warn("流式响应限速(429)重试耗尽，切换模型",
+						slog.Warn("流式响应限速/过载重试耗尽，切换模型",
 							"from", modelClients[oldIdx].Model.ModelID,
 							"to", currentModel.ModelID,
 							"switch", switchCount, "max_switches", maxSwitches)
@@ -505,24 +567,53 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 						streamErr = true
 						break
 					}
-					sendError(fmt.Sprintf("流式响应限速(429)，已重试 %d 次且无可切换模型: %s", rateLimitRetry, chunk.Error.Error()))
+					sendError(fmt.Sprintf("流式响应限速/过载，已重试 %d 次且无可切换模型: %s", rateLimitRetry, chunk.Error.Error()))
 					return
 				}
 
-				// 非 429 错误：原有通用重试逻辑
-				if retryCount < maxRetries {
+				// Category B: 瞬态错误 — 根据模型信任度决定重试次数
+				effectiveMax := maxRetries
+				if !modelTrusted {
+					effectiveMax = 0
+				}
+				if retryCount < effectiveMax {
 					retryCount++
-					slog.Warn("流式响应错误，重试中",
-						"model", currentModel.ModelID,
-						"retry", retryCount, "max", maxRetries,
-						"error", chunk.Error)
+					// 超时错误：翻倍超时时间
+					if errors.Is(chunk.Error, provider.ErrIdleTimeout) {
+						if adj, ok := llmClient.(provider.TimeoutAdjustable); ok {
+							adj.DoubleStreamIdleTimeout()
+						}
+					}
+					// 502/503 短延迟
+					if provider.IsTransientServerError(chunk.Error) {
+						slog.Warn("流式响应瞬态错误，等待后重试",
+							"model", currentModel.ModelID,
+							"retry", retryCount, "max", effectiveMax,
+							"delay", provider.TransientRetryDelay, "error", chunk.Error)
+						eventCh <- StreamEvent{Type: "status", Content: fmt.Sprintf(
+							"服务暂时不可用，等待 %d 秒后重试 (%d/%d)...",
+							int(provider.TransientRetryDelay.Seconds()), retryCount, effectiveMax)}
+						select {
+						case <-time.After(provider.TransientRetryDelay):
+						case <-ctx.Done():
+							sendError("操作已取消")
+							return
+						}
+					} else {
+						slog.Warn("流式响应错误，重试中",
+							"model", currentModel.ModelID,
+							"retry", retryCount, "max", effectiveMax,
+							"error", chunk.Error)
+					}
 					streamErr = true
 					break
 				}
-				// 已达重试上限，循环切换到下一个模型
+				// 重试耗尽或未信任模型首次失败 → 切换
 				if len(modelClients) > 1 && switchCount < maxSwitches {
 					switchCount++
 					retryCount = 0
+					rateLimitRetry = 0
+					modelTrusted = false
 					oldIdx := modelIdx
 					modelIdx = (modelIdx + 1) % len(modelClients)
 					llmClient = modelClients[modelIdx].Client
@@ -531,7 +622,7 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 						"from", modelClients[oldIdx].Model.ModelID,
 						"to", currentModel.ModelID,
 						"switch", switchCount, "max_switches", maxSwitches,
-						"error", chunk.Error)
+						"trusted", modelTrusted, "error", chunk.Error)
 					eventCh <- StreamEvent{Type: "status", Content: fmt.Sprintf("自动切换到模型: %s (%d/%d)", currentModel.Name, switchCount, maxSwitches)}
 					streamErr = true
 					break
@@ -576,13 +667,25 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 
 		retryCount = 0     // 请求和流式都成功后才重置重试计数
 		switchCount = 0    // 成功后重置切换计数，允许后续再次切换
-		rateLimitRetry = 0 // 成功后重置 429 限速计数
+		rateLimitRetry = 0 // 成功后重置 429/529 限速计数
+		modelTrusted = true // 成功响应，当前模型获得信任
 
 		// 更新 token 计数并实时推送到前端
 		if totalTokens > 0 {
 			sessionSvc.UpdateTokens(cfg.ConversationID, totalTokens)
-			eventCh <- StreamEvent{Type: "token_update", Data: map[string]interface{}{"total_tokens": totalTokens}}
-			lastAPITokens = totalTokens
+			eventCh <- StreamEvent{Type: "token_update", Data: map[string]interface{}{
+				"total_tokens": totalTokens, "source": "api",
+			}}
+			tokenTracker.RecordAPIUsage(totalTokens, sendMessages, toolDefs)
+		} else {
+			// API 未返回 usage：推送估算值
+			info := tokenTracker.EstimateCurrent(sendMessages, toolDefs)
+			if info.Tokens > 0 {
+				sessionSvc.UpdateTokens(cfg.ConversationID, info.Tokens)
+				eventCh <- StreamEvent{Type: "token_update", Data: map[string]interface{}{
+					"total_tokens": info.Tokens, "source": string(info.Source),
+				}}
+			}
 		}
 
 		// 输出被截断且存在不完整的工具调用 → 显示错误 + 引导重试
@@ -634,12 +737,18 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 		// 追加 assistant 消息到上下文（token 阈值已在 LLM 调用前预检查）
 		assistantMsg := provider.Message{Role: "assistant", Content: fullContent, ReasoningContent: fullReasoning, ToolCalls: fullToolCalls}
 		messages = append(messages, assistantMsg)
-		lastMsgCount = len(messages)
+		tokenTracker.RecordMessageCount(len(messages))
 
 		// 检查是否需要执行工具
 		if finishReason != "tool_calls" && len(fullToolCalls) == 0 {
 			// 最终回答，本轮对话结束
-			eventCh <- StreamEvent{Type: "done", Data: map[string]interface{}{"total_tokens": totalTokens}}
+			doneData := map[string]interface{}{"total_tokens": totalTokens, "source": "api"}
+			if totalTokens == 0 {
+				info := tokenTracker.EstimateCurrent(sendMessages, toolDefs)
+				doneData["total_tokens"] = info.Tokens
+				doneData["source"] = string(info.Source)
+			}
+			eventCh <- StreamEvent{Type: "done", Data: doneData}
 			return
 		}
 
@@ -1231,20 +1340,6 @@ func formatToolCallsJSON(calls []provider.ToolCall) string {
 		return "[]"
 	}
 	return string(data)
-}
-
-// estimateMessagesTokens 估算 messages 数组的总 token 数
-func estimateMessagesTokens(messages []provider.Message) int {
-	total := 0
-	for _, m := range messages {
-		total += agentctx.EstimateTokens(m.Content)
-		total += agentctx.EstimateTokens(m.ReasoningContent)
-		for _, tc := range m.ToolCalls {
-			total += agentctx.EstimateTokens(tc.Arguments)
-			total += len(tc.Name)
-		}
-	}
-	return total
 }
 
 // toolCallNames 提取工具调用名称列表（用于日志）

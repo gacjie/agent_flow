@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"agent_flow/src/agentctx"
 	"agent_flow/src/common"
 	"agent_flow/src/model"
+	"agent_flow/src/tokenutil"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // CreateWorkspace 创建工作区（JSON）
@@ -80,7 +82,7 @@ func (c *WorkbenchCtrl) ListTasks(w http.ResponseWriter, r *http.Request) {
 	var taskSummaryTokens int
 	if phase := c.TaskService.GetCurrentPhase(ws.UUID); phase > 0 {
 		summary := c.TaskService.GetPhaseTasksSummary(ws.UUID, phase)
-		taskSummaryTokens = agentctx.EstimateTokens(summary)
+		taskSummaryTokens = tokenutil.EstimateText(summary)
 	}
 
 	common.JSONSuccess(w, map[string]interface{}{
@@ -98,4 +100,31 @@ func (c *WorkbenchCtrl) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	common.JSONSuccess(w, workspaces)
+}
+
+// DeleteWorkspace 删除工作区（含所有会话和工作文件，不影响关联项目）
+func (c *WorkbenchCtrl) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
+	wsID, err := strconv.ParseUint(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		common.JSONError(w, http.StatusBadRequest, "无效的工作区 ID")
+		return
+	}
+
+	ws, err := c.WorkspaceService.GetByID(uint(wsID))
+	if err != nil {
+		common.JSONError(w, http.StatusNotFound, "工作区不存在")
+		return
+	}
+
+	if c.RunnerManager != nil && c.RunnerManager.IsWorkspaceRunning(ws.UUID) {
+		common.JSONError(w, http.StatusConflict, "工作区有正在运行的会话，请先停止后再删除")
+		return
+	}
+
+	if err := c.WorkspaceService.Delete(ws.ID); err != nil {
+		common.JSONError(w, http.StatusInternalServerError, "删除工作区失败: "+err.Error())
+		return
+	}
+
+	common.JSONSuccess(w, nil)
 }

@@ -90,10 +90,11 @@ type Chunk struct {
 
 // ProviderConfig LLM 供应商连接配置
 type ProviderConfig struct {
-	BaseURL    string
-	APIKey     string
-	Timeout    int // 秒
-	MaxRetries int
+	BaseURL           string
+	APIKey            string
+	Timeout           int // 秒
+	MaxRetries        int
+	StreamIdleTimeout int // SSE 流空闲超时（秒），0 表示使用默认 timeout*2.5
 }
 
 // APIError 带 HTTP 状态码的 API 错误（用于区分 429 等特定错误）
@@ -113,6 +114,45 @@ func IsRateLimited(err error) bool {
 		return apiErr.StatusCode == 429
 	}
 	return false
+}
+
+// IsRateLimitOrOverloaded 判断是否为限速或过载错误 (429, 529)
+func IsRateLimitOrOverloaded(err error) bool {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == 429 || apiErr.StatusCode == 529
+	}
+	return false
+}
+
+// IsPermanentError 判断是否为配置类错误 (400, 401, 403, 404)
+// 这类错误不重试当前模型，但可以切换到其他模型尝试
+func IsPermanentError(err error) bool {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.StatusCode {
+		case 400, 401, 403, 404:
+			return true
+		}
+	}
+	return false
+}
+
+// IsTransientServerError 判断是否为短暂服务端错误 (502, 503)，需短延时后重试
+func IsTransientServerError(err error) bool {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == 502 || apiErr.StatusCode == 503
+	}
+	return false
+}
+
+// TransientRetryDelay 短暂服务端错误 (502/503) 重试前的等待时间
+const TransientRetryDelay = 5 * time.Second
+
+// TimeoutAdjustable 支持动态调整流式超时的客户端接口
+type TimeoutAdjustable interface {
+	DoubleStreamIdleTimeout()
 }
 
 // ErrIdleTimeout 流式读取空闲超时错误

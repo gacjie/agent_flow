@@ -21,6 +21,9 @@
 > - `[P0][Backend:Go] 新增用户模型和数据库迁移 — src/model/user.go`
 > - `[P1][Frontend] 实现用户列表页和分页交互 — templates/admin/user_list.html`
 > - `[P0][Backend:Python] 添加 JWT 认证中间件 — app/middleware/auth.py`
+> - `[P0][Backend:PHP] 新增用户模型和数据库迁移 — app/Models/User.php`
+> - `[P1][Backend:Node] 添加 JWT 认证中间件 — src/middleware/auth.ts`
+> - `[P0][Backend] 新增用户实体和仓储层 — src/main/java/model/User.java`
 - 描述包含：要做什么、涉及文件、验收条件、依赖或待确认点。
 - 任务粒度：一个专家、一个技术栈、一次会话可完成。
 
@@ -77,6 +80,7 @@
 - 需求文档中的 Must 功能是否全部有对应叶子任务覆盖。
 - 设计文档中的架构约束（应用边界、模块划分）是否在任务结构中正确体现。
 - 任务的文件路径是否与设计文档中的文件结构一致。
+- 需求文档中的非功能性需求（安全/性能/兼容性等）是否有对应任务或已纳入相关任务的验收条件。
 
 ## 5. 写入与自检
 

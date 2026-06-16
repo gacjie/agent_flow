@@ -828,6 +828,8 @@ a:hover {
     border-right: 1px solid var(--border);
     padding: 1rem 0;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .sidebar nav {
@@ -835,6 +837,23 @@ a:hover {
     flex-direction: column;
     gap: 0.125rem;
     padding: 0 0.5rem;
+    flex: 1;
+}
+
+.sidebar-version {
+    padding: 0.75rem 0.75rem 0.5rem;
+    text-align: center;
+}
+
+.sidebar-version .version-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    letter-spacing: 0.02em;
 }
 
 .sidebar-divider {

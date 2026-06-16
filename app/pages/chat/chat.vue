@@ -27,6 +27,7 @@
       <view class="nav-bar">
         <text class="nav-back" @click="goBack">‹</text>
         <text class="nav-title">{{ currentConv.title || '新对话' }}</text>
+        <text class="nav-tasks" @click="openTasks">任务</text>
         <text v-if="isRunning" class="nav-stop" @click="stop">停止</text>
       </view>
 
@@ -198,6 +199,7 @@ async function openConv(conv) {
 
 function goBack() { currentConv.value = null; lastSeq.value = 0 }
 function navigateBack() { uni.redirectTo({ url: '/pages/workbench/workbench' }) }
+function openTasks() { uni.navigateTo({ url: `/pages/tasks/tasks?wsId=${wsId.value}` }) }
 
 function resultPreview(b) {
   if (b.isError) return truncate(b.content, 40) || '执行失败'
@@ -268,7 +270,15 @@ function handleEvent(e) {
     case 'status':
       messages.value.push({ role: 'status', blocks: [{ type: 'text', content: e.content || '' }] })
       break
+    case 'token_update':
+      if (e.data && e.data.total_tokens) {
+        currentConv.value.total_tokens = e.data.total_tokens
+      }
+      break
     case 'done':
+      if (e.data && e.data.total_tokens) {
+        currentConv.value.total_tokens = e.data.total_tokens
+      }
       isRunning.value = false
       flushStreaming()
       return
@@ -362,6 +372,7 @@ function convStatusText(s) { return { 1: '进行中', 2: '已完成', 3: '已取
 .nav-back { font-size: 48rpx; color: #fff; width: 60rpx; }
 .nav-title { flex: 1; font-size: 34rpx; font-weight: 500; color: #fff; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .nav-action { font-size: 28rpx; color: #fff; }
+.nav-tasks { font-size: 26rpx; color: #fff; margin-right: 20rpx; }
 .nav-stop { font-size: 26rpx; color: #ffe0e0; }
 
 /* 会话列表 */

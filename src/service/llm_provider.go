@@ -289,10 +289,11 @@ func (s *LLMModelService) CreateClientFromModel(m *model.LLMModel) (provider.Cli
 	apiKey := s.DecryptAPIKey(m)
 	llmCfg := config.Get().LLM
 	return provider.NewClientByProtocol(m.Protocol, provider.ProviderConfig{
-		BaseURL:    m.BaseURL,
-		APIKey:     apiKey,
-		Timeout:    llmCfg.Timeout,
-		MaxRetries: llmCfg.MaxRetries,
+		BaseURL:           m.BaseURL,
+		APIKey:            apiKey,
+		Timeout:           llmCfg.Timeout,
+		MaxRetries:        llmCfg.MaxRetries,
+		StreamIdleTimeout: llmCfg.StreamIdleTimeout,
 	})
 }
 

@@ -2,8 +2,8 @@
 
 ## 标签
 
-- `[Backend]`：项目只有一个后端技术栈或编排师可唯一判断。
-- `[Backend:Go]` / `[Backend:Python]`：多后端或需明确路由。
+- `[Backend]`：项目只有一个后端技术栈或无专用智能体覆盖的技术栈（由 derek 处理）。
+- `[Backend:Go]` / `[Backend:Python]` / `[Backend:PHP]` / `[Backend:Node]`：多后端或需明确路由。
 - `[Frontend]`：页面、样式、浏览器交互。
 - `[Test:Unit]`、`[Test:API]`、`[Test:E2E]`、`[Test:Integration]`：按实际测试对象选择。
 - `[Doc]`：项目文档、用户说明、API 文档。

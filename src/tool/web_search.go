@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,13 +13,15 @@ import (
 	"time"
 )
 
-// WebSearchTool 网络搜索工具（支持批量）
-type WebSearchTool struct{}
+// WebSearchTool 网络搜索工具（支持批量，多引擎降级）
+type WebSearchTool struct {
+	ConfigGetter ConfigGetter
+}
 
 func (t *WebSearchTool) Name() string { return "web_searches" }
 
 func (t *WebSearchTool) Description() string {
-	return "在互联网上搜索信息（DuckDuckGo），并行执行（限制并发 ≤3 避免限流），返回相关网页的标题、链接和摘要。"
+	return "在互联网上搜索信息，支持多引擎（SearXNG/Jina/DuckDuckGo）自动切换，并行执行（限制并发 ≤3），返回相关网页的标题、链接和摘要。"
 }
 
 func (t *WebSearchTool) Parameters() json.RawMessage {
@@ -60,7 +63,6 @@ func (t *WebSearchTool) Execute(ctx context.Context, args string) *Result {
 		n := len(params.Queries)
 		results := make([]string, n)
 
-		// 信号量限制并发数 ≤3，避免 DuckDuckGo 限流
 		sem := make(chan struct{}, 3)
 		var wg sync.WaitGroup
 		for i, q := range params.Queries {
@@ -70,7 +72,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, args string) *Result {
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
-				res := searchSingle(ctx, query, maxResults)
+				res := t.searchSingle(ctx, query, maxResults)
 				if res.IsError {
 					results[idx] = fmt.Sprintf("=== [%d/%d] 搜索: %q（错误）===\n%s", idx+1, n, query, res.Content)
 				} else {
@@ -83,10 +85,10 @@ func (t *WebSearchTool) Execute(ctx context.Context, args string) *Result {
 	}
 
 	// 单次搜索模式
-	return searchSingle(ctx, params.Query, params.MaxResults)
+	return t.searchSingle(ctx, params.Query, params.MaxResults)
 }
 
-func searchSingle(ctx context.Context, query string, maxResults int) *Result {
+func (t *WebSearchTool) searchSingle(ctx context.Context, query string, maxResults int) *Result {
 	if query == "" {
 		return ErrorResult("搜索关键词不能为空")
 	}
@@ -101,7 +103,7 @@ func searchSingle(ctx context.Context, query string, maxResults int) *Result {
 	httpCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	results, err := searchDuckDuckGo(httpCtx, query, maxResults)
+	results, err := t.searchWithFallback(httpCtx, query, maxResults)
 	if err != nil {
 		return ErrorResult("搜索失败: " + err.Error())
 	}
@@ -113,15 +115,240 @@ func searchSingle(ctx context.Context, query string, maxResults int) *Result {
 	return SuccessResult(formatSearchResults(results))
 }
 
-// webSearchResult 搜索结果
-type webSearchResult struct {
-	Title   string
-	URL     string
-	Content string
+// searchWithFallback 根据配置选择引擎并按优先级降级
+func (t *WebSearchTool) searchWithFallback(ctx context.Context, query string, maxResults int) ([]webSearchResult, error) {
+	engine := "auto"
+	if t.ConfigGetter != nil {
+		if v := t.ConfigGetter.Get("search.engine"); v != "" {
+			engine = v
+		}
+	}
+
+	type searchFunc func(ctx context.Context, query string, maxResults int) ([]webSearchResult, error)
+	type engineEntry struct {
+		name string
+		fn   searchFunc
+	}
+
+	var engines []engineEntry
+	switch engine {
+	case "searxng":
+		engines = []engineEntry{{"SearXNG", t.searchSearXNG}}
+	case "jina":
+		engines = []engineEntry{{"Jina", t.searchJina}}
+	case "duckduckgo":
+		engines = []engineEntry{{"DuckDuckGo", t.searchDuckDuckGo}}
+	default: // auto
+		engines = []engineEntry{
+			{"SearXNG", t.searchSearXNG},
+			{"Jina", t.searchJina},
+			{"DuckDuckGo", t.searchDuckDuckGo},
+		}
+	}
+
+	var lastErr error
+	for _, eng := range engines {
+		engineCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		results, err := eng.fn(engineCtx, query, maxResults)
+		cancel()
+
+		if err == nil && len(results) > 0 {
+			return results, nil
+		}
+		if err != nil {
+			lastErr = fmt.Errorf("%s: %w", eng.name, err)
+			slog.Debug("搜索引擎失败，尝试下一个", "engine", eng.name, "error", err)
+		} else {
+			lastErr = fmt.Errorf("%s: 无搜索结果", eng.name)
+			slog.Debug("搜索引擎无结果，尝试下一个", "engine", eng.name)
+		}
+	}
+	return nil, lastErr
 }
 
-// searchDuckDuckGo 通过 DuckDuckGo HTML 页面搜索
-func searchDuckDuckGo(ctx context.Context, query string, maxResults int) ([]webSearchResult, error) {
+// searchSearXNG 通过 SearXNG 实例搜索（JSON API）
+func (t *WebSearchTool) searchSearXNG(ctx context.Context, query string, maxResults int) ([]webSearchResult, error) {
+	baseURL := "https://search.inetol.net"
+	if t.ConfigGetter != nil {
+		if v := t.ConfigGetter.Get("search.searxng_url"); v != "" {
+			baseURL = v
+		}
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	params := url.Values{}
+	params.Set("q", query)
+	params.Set("format", "json")
+	params.Set("language", "auto")
+
+	reqURL := baseURL + "/search?" + params.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("返回 %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	var parsed struct {
+		Results []struct {
+			URL     string `json:"url"`
+			Title   string `json:"title"`
+			Content string `json:"content"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("解析 JSON 失败: %w", err)
+	}
+
+	var results []webSearchResult
+	for _, r := range parsed.Results {
+		if len(results) >= maxResults {
+			break
+		}
+		if r.URL != "" && r.Title != "" {
+			results = append(results, webSearchResult{
+				Title:   r.Title,
+				URL:     r.URL,
+				Content: r.Content,
+			})
+		}
+	}
+	return results, nil
+}
+
+// searchJina 通过 Jina AI 搜索
+func (t *WebSearchTool) searchJina(ctx context.Context, query string, maxResults int) ([]webSearchResult, error) {
+	reqURL := "https://s.jina.ai/" + url.PathEscape(query)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+	if t.ConfigGetter != nil {
+		if key := t.ConfigGetter.Get("search.jina_api_key"); key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("返回 %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	return parseJinaResponse(body, maxResults)
+}
+
+// parseJinaResponse 解析 Jina 搜索响应
+func parseJinaResponse(body []byte, maxResults int) ([]webSearchResult, error) {
+	// Jina JSON 格式: {"data": [{"title": "...", "url": "...", "description": "...", "content": "..."}]}
+	var jsonResp struct {
+		Data []struct {
+			Title       string `json:"title"`
+			URL         string `json:"url"`
+			Description string `json:"description"`
+			Content     string `json:"content"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &jsonResp); err == nil && len(jsonResp.Data) > 0 {
+		var results []webSearchResult
+		for _, item := range jsonResp.Data {
+			if len(results) >= maxResults {
+				break
+			}
+			snippet := item.Description
+			if snippet == "" {
+				snippet = item.Content
+				if len([]rune(snippet)) > 200 {
+					snippet = string([]rune(snippet)[:200]) + "..."
+				}
+			}
+			if item.URL != "" && item.Title != "" {
+				results = append(results, webSearchResult{
+					Title:   item.Title,
+					URL:     item.URL,
+					Content: snippet,
+				})
+			}
+		}
+		return results, nil
+	}
+
+	// 降级：尝试解析为 Markdown 格式
+	return parseJinaMarkdown(string(body), maxResults), nil
+}
+
+// parseJinaMarkdown 从 Jina 的 Markdown 响应中提取结果
+func parseJinaMarkdown(text string, maxResults int) []webSearchResult {
+	var results []webSearchResult
+	lines := strings.Split(text, "\n")
+
+	for i := 0; i < len(lines) && len(results) < maxResults; i++ {
+		line := strings.TrimSpace(lines[i])
+		// 匹配 Markdown 链接格式: [Title](URL)
+		if !strings.HasPrefix(line, "[") {
+			continue
+		}
+		closeBracket := strings.Index(line, "](")
+		if closeBracket == -1 {
+			continue
+		}
+		title := line[1:closeBracket]
+		rest := line[closeBracket+2:]
+		closeParen := strings.Index(rest, ")")
+		if closeParen == -1 {
+			continue
+		}
+		link := rest[:closeParen]
+		if !strings.HasPrefix(link, "http") {
+			continue
+		}
+
+		snippet := ""
+		if i+1 < len(lines) {
+			next := strings.TrimSpace(lines[i+1])
+			if next != "" && !strings.HasPrefix(next, "[") && !strings.HasPrefix(next, "#") {
+				snippet = next
+			}
+		}
+
+		results = append(results, webSearchResult{
+			Title:   title,
+			URL:     link,
+			Content: snippet,
+		})
+	}
+	return results
+}
+
+// searchDuckDuckGo 通过 DuckDuckGo HTML 页面搜索（兜底）
+func (t *WebSearchTool) searchDuckDuckGo(ctx context.Context, query string, maxResults int) ([]webSearchResult, error) {
 	form := url.Values{}
 	form.Set("q", query)
 
@@ -149,6 +376,13 @@ func searchDuckDuckGo(ctx context.Context, query string, maxResults int) ([]webS
 	}
 
 	return parseDDGHTML(string(body), maxResults), nil
+}
+
+// webSearchResult 搜索结果
+type webSearchResult struct {
+	Title   string
+	URL     string
+	Content string
 }
 
 // parseDDGHTML 从 DuckDuckGo HTML 响应中提取搜索结果

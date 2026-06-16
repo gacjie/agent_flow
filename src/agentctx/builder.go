@@ -123,12 +123,3 @@ func FormatBlocks(blocks []ContextBlock) string {
 	return sb.String()
 }
 
-// EstimateTokens 粗略估算 token 数（按 1 token ≈ 3 字符计算中文）
-func EstimateTokens(text string) int {
-	if text == "" {
-		return 0
-	}
-	// 中文约 1.5 token/字，英文约 1 token/4字符，取中间值
-	chars := len([]rune(text))
-	return (chars*3 + 2) / 2
-}

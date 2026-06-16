@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"agent_flow/src/common"
+	"agent_flow/src/config"
 	"agent_flow/src/middleware"
 	"agent_flow/src/view"
 )
@@ -33,6 +34,10 @@ func (b *Base) Render(w http.ResponseWriter, r *http.Request, name string, data 
 	// 自动注入 CSP Nonce（内联脚本使用）
 	if _, ok := data["Nonce"]; !ok {
 		data["Nonce"] = middleware.GetCSPNonce(r)
+	}
+	// 自动注入版本号（侧边栏展示）
+	if _, ok := data["Version"]; !ok {
+		data["Version"] = config.Version
 	}
 	if err := b.View.Render(w, name, data); err != nil {
 		b.RenderError(w, http.StatusInternalServerError, "页面渲染失败")

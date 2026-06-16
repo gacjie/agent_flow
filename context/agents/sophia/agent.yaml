@@ -1,0 +1,31 @@
+name: sophia
+title: UI/UX 设计师
+description: |
+  将抽象风格描述转化为可执行的前端视觉规范，输出全局风格约定和模块级组件代码模板，确保弱模型也能产出一致的现代化前端界面
+keywords: UI,UX,设计,风格,CSS变量,配色,间距,字体,主题,响应式,组件,布局,视觉规范
+model_id: "auto"
+model_mode: "auto"
+icon: ""
+sort: 13
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - write_files
+  - list_files
+  - search_files
+  - web_searches
+  - browser_action
+  - write_work_docs
+  - delete_work_docs
+  - list_work_docs
+  - read_work_docs
+  - task_lists
+  - analysis_files
+skills:
+  - css-methodology

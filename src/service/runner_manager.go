@@ -98,6 +98,24 @@ func (m *RunnerManager) IsRunning(key string) bool {
 	return !sess.finished
 }
 
+// IsWorkspaceRunning 检查指定工作区是否有任何活跃的后台 runner
+func (m *RunnerManager) IsWorkspaceRunning(workspaceUUID string) bool {
+	prefix := workspaceUUID + ":"
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for key, sess := range m.sessions {
+		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+			sess.mu.Lock()
+			running := !sess.finished
+			sess.mu.Unlock()
+			if running {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Start 以独立 context 启动 ChatRunner，将事件写入缓冲区并分发给订阅者
 // 若该会话已有活跃 runner，直接返回（防重复启动）
 func (m *RunnerManager) Start(key string, runner *ChatRunner, cfg RunConfig) {

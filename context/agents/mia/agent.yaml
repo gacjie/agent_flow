@@ -5,7 +5,7 @@ keywords: 文档,API文档,技术写作,代码示例,可运行示例,配置参�
 model_id: auto
 model_mode: auto
 icon: ""
-sort: 7
+sort: 32
 status: 1
 auto_load_files:
   - role

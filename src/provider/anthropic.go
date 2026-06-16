@@ -30,10 +30,14 @@ func NewClaudeClient(cfg ProviderConfig) *ClaudeClient {
 		timeout = cfg.Timeout
 	}
 	baseDur := time.Duration(timeout) * time.Second
+	streamIdle := baseDur * 5 / 2
+	if cfg.StreamIdleTimeout > 0 {
+		streamIdle = time.Duration(cfg.StreamIdleTimeout) * time.Second
+	}
 	return &ClaudeClient{
 		cfg:               cfg,
 		timeout:           baseDur,
-		streamIdleTimeout: baseDur * 5 / 2, // 流式空闲超时 = 2.5x（如 120s→300s）
+		streamIdleTimeout: streamIdle,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				TLSHandshakeTimeout:   15 * time.Second,
@@ -41,6 +45,10 @@ func NewClaudeClient(cfg ProviderConfig) *ClaudeClient {
 			},
 		},
 	}
+}
+
+func (c *ClaudeClient) DoubleStreamIdleTimeout() {
+	c.streamIdleTimeout *= 2
 }
 
 // ---- Claude API 请求/响应结构 ----
@@ -569,8 +577,15 @@ func (c *ClaudeClient) readSSE(resp *http.Response, ch chan<- Chunk) {
 					Message string `json:"message"`
 				} `json:"error"`
 			}
-			if json.Unmarshal([]byte(data), &errData) == nil && errData.Error.Type == "rate_limit_error" {
-				ch <- Chunk{Error: &APIError{StatusCode: 429, Message: errData.Error.Message}, Done: true}
+			if json.Unmarshal([]byte(data), &errData) == nil {
+				switch errData.Error.Type {
+				case "rate_limit_error":
+					ch <- Chunk{Error: &APIError{StatusCode: 429, Message: errData.Error.Message}, Done: true}
+				case "overloaded_error":
+					ch <- Chunk{Error: &APIError{StatusCode: 529, Message: errData.Error.Message}, Done: true}
+				default:
+					ch <- Chunk{Error: fmt.Errorf("Claude SSE 错误: %s", data), Done: true}
+				}
 			} else {
 				ch <- Chunk{Error: fmt.Errorf("Claude SSE 错误: %s", data), Done: true}
 			}
