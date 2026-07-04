@@ -12,6 +12,7 @@ type Agent struct {
 	ModelMode     string   `gorm:"size:20;default:auto" json:"model_mode"`             // auto=自动切换, default=默认模型
 	AutoLoadFiles string   `gorm:"size:1000" json:"auto_load_files"`
 	AutoLoadTools string   `gorm:"size:1000" json:"auto_load_tools"`
+	DocRoles      string   `gorm:"size:200" json:"doc_roles"`
 	Icon          string   `gorm:"size:50" json:"icon"`
 	Status        int      `gorm:"default:1" json:"status"`
 	Sort          int      `gorm:"default:0" json:"sort"`
@@ -54,6 +55,7 @@ type AgentCreateReq struct {
 	WorkflowContent string
 	AutoLoadFiles   string
 	AutoLoadTools   string
+	DocRoles        string
 	Icon            string
 	SkillIDs        []uint // 关联技能 ID 列表
 }
@@ -72,6 +74,7 @@ type AgentUpdateReq struct {
 	WorkflowContent *string
 	AutoLoadFiles   *string
 	AutoLoadTools   *string
+	DocRoles        *string
 	Icon            *string
 	Status          *int `validate:"omitempty,oneof=0 1"`
 	SkillIDs        []uint

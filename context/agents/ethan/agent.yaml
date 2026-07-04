@@ -19,12 +19,13 @@ auto_load_tools:
   - list_files
   - search_files
   - web_searches
-  - write_work_docs
-  - delete_work_docs
-  - list_work_docs
-  - read_work_docs
+  - write_contexts
+  - delete_contexts
+  - context_lists
+  - read_contexts
   - task_lists
   - analysis_files
   - diagnose_files
+doc_roles: "backend,frontend,database,security,api"
 skills:
   - api-design

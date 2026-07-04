@@ -63,13 +63,13 @@
             <div class="form-control" style="flex:1">
                 <label class="form-label">最大输入 Token</label>
                 <input type="number" class="input" name="max_input_tokens"
-                       value="{{if .FormModel.MaxInputTokens}}{{.FormModel.MaxInputTokens}}{{else}}128000{{end}}"
+                       value="{{if .FormModel.MaxInputTokens}}{{.FormModel.MaxInputTokens}}{{else}}200000{{end}}"
                        min="1" max="10000000">
             </div>
             <div class="form-control" style="flex:1">
                 <label class="form-label">最大输出 Token</label>
                 <input type="number" class="input" name="max_output_tokens"
-                       value="{{if .FormModel.MaxOutputTokens}}{{.FormModel.MaxOutputTokens}}{{else}}4096{{end}}"
+                       value="{{if .FormModel.MaxOutputTokens}}{{.FormModel.MaxOutputTokens}}{{else}}128000{{end}}"
                        min="1" max="1000000">
             </div>
         </div>
@@ -81,6 +81,8 @@
                 <option value="low" {{if eq .FormModel.ReasoningEffort "low"}}selected{{end}}>低 (low)</option>
                 <option value="medium" {{if eq .FormModel.ReasoningEffort "medium"}}selected{{end}}>中 (medium)</option>
                 <option value="high" {{if eq .FormModel.ReasoningEffort "high"}}selected{{end}}>高 (high)</option>
+                <option value="xhigh" {{if eq .FormModel.ReasoningEffort "xhigh"}}selected{{end}}>极高 (xhigh)</option>
+                <option value="max" {{if eq .FormModel.ReasoningEffort "max"}}selected{{end}}>最高 (max)</option>
             </select>
             <p class="text-sm opacity-60 mt-1">启用后模型将进行深度思考，支持 DeepSeek/OpenAI/Qwen/Kimi/MiniMax 等</p>
         </div>
@@ -240,8 +242,8 @@
         document.querySelector('[name="api_model_id"]').value = m.id;
         var nameInput = document.querySelector('[name="name"]');
         if (!nameInput.value) nameInput.value = m.name || m.id;
-        document.querySelector('[name="max_input_tokens"]').value = m.max_input_tokens || 128000;
-        document.querySelector('[name="max_output_tokens"]').value = m.max_output_tokens || 4096;
+        document.querySelector('[name="max_input_tokens"]').value = m.max_input_tokens || 200000;
+        document.querySelector('[name="max_output_tokens"]').value = m.max_output_tokens || 128000;
         var caps = (m.capabilities || 'tools').split(',');
         document.querySelector('[name="cap_vision"]').checked = caps.indexOf('vision') >= 0;
         document.querySelector('[name="cap_image_gen"]').checked = caps.indexOf('image_gen') >= 0;

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -117,19 +118,180 @@ func (l *Loader) LoadProject(projectPath string) []ContextBlock {
 	return blocks
 }
 
-// LoadSystem 加载系统级上下文（全局规则，如有）
+// LoadSystem 加载系统级上下文（system.md + global.md + user.md）
 func (l *Loader) LoadSystem(contextRoot string) []ContextBlock {
-	path := filepath.Join(contextRoot, "system.md")
-	content := readFileIfExists(path)
-	if content == "" {
+	var blocks []ContextBlock
+
+	// system.md — 系统环境信息（启动时自动生成）
+	if content := readFileIfExists(filepath.Join(contextRoot, "system.md")); content != "" {
+		blocks = append(blocks, ContextBlock{
+			Level:   LevelSystem,
+			Label:   "系统规则",
+			Content: content,
+			Source:  "system.md",
+		})
+	}
+
+	// global.md — 全局提示词（跟随项目）
+	if content := readFileIfExists(filepath.Join(contextRoot, "global.md")); content != "" {
+		blocks = append(blocks, ContextBlock{
+			Level:   LevelSystem,
+			Label:   "全局提示词",
+			Content: content,
+			Source:  "global.md",
+		})
+	}
+
+	// user.md — 用户自定义提示词（不存在则跳过）
+	if content := readFileIfExists(filepath.Join(contextRoot, "user.md")); content != "" {
+		blocks = append(blocks, ContextBlock{
+			Level:   LevelSystem,
+			Label:   "用户提示词",
+			Content: content,
+			Source:  "user.md",
+		})
+	}
+
+	return blocks
+}
+
+// LoadProjectDocs 扫描 {projectPath}/docs/*.md，按文件名前缀与 agentRoles 匹配加载
+// 文件名前缀为第一个 "-" 前的部分（如 backend-standards.md 前缀为 backend），大小写不敏感
+func (l *Loader) LoadProjectDocs(projectPath string, agentRoles []string) []ContextBlock {
+	if len(agentRoles) == 0 {
 		return nil
 	}
-	return []ContextBlock{{
-		Level:   LevelSystem,
-		Label:   "系统规则",
-		Content: content,
-		Source:  "system.md",
-	}}
+
+	docsDir := filepath.Join(projectPath, "docs")
+	if !dirExists(docsDir) {
+		return nil
+	}
+
+	entries, err := os.ReadDir(docsDir)
+	if err != nil {
+		slog.Debug("读取 docs 目录失败", "path", docsDir, "error", err)
+		return nil
+	}
+
+	roleSet := make(map[string]bool, len(agentRoles))
+	for _, r := range agentRoles {
+		roleSet[strings.TrimSpace(strings.ToLower(r))] = true
+	}
+
+	// 收集文件名并排序（稳定输出）
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasSuffix(strings.ToLower(name), ".md") {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+
+	var blocks []ContextBlock
+	for _, name := range names {
+		// 提取前缀：第一个 "-" 前的部分（转小写）
+		base := strings.TrimSuffix(strings.ToLower(name), ".md")
+		prefix := base
+		if idx := strings.Index(base, "-"); idx > 0 {
+			prefix = base[:idx]
+		}
+		if !roleSet[prefix] {
+			continue
+		}
+
+		content := readFileIfExists(filepath.Join(docsDir, name))
+		if content == "" {
+			continue
+		}
+
+		// 向后兼容：剥离已有文档的 front matter
+		if strings.HasPrefix(strings.TrimSpace(content), "---") {
+			_, body := parseFrontMatterRoles(content)
+			content = strings.TrimSpace(body)
+			if content == "" {
+				continue
+			}
+		}
+
+		label := strings.TrimSuffix(name, ".md")
+		blocks = append(blocks, ContextBlock{
+			Level:   LevelProjectDoc,
+			Label:   label,
+			Content: content,
+			Source:  "docs/" + name,
+		})
+	}
+
+	return blocks
+}
+
+// parseFrontMatterRoles 提取 YAML front matter 中的 roles 字段
+// 支持内联数组 roles: [a, b] 和块列表 - a 两种格式
+func parseFrontMatterRoles(content string) (roles []string, body string) {
+	lines := strings.SplitAfter(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(strings.TrimRight(lines[0], "\n")) != "---" {
+		return nil, content
+	}
+
+	endIdx := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(strings.TrimRight(lines[i], "\n")) == "---" {
+			endIdx = i
+			break
+		}
+	}
+	if endIdx < 0 {
+		return nil, content
+	}
+
+	// 解析 front matter 中的 roles
+	inRolesBlock := false
+	for i := 1; i < endIdx; i++ {
+		line := strings.TrimRight(lines[i], "\n")
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "roles:") {
+			value := strings.TrimSpace(strings.TrimPrefix(trimmed, "roles:"))
+			if value != "" {
+				// 内联数组：roles: [a, b, c]
+				value = strings.Trim(value, "[]")
+				for _, r := range strings.Split(value, ",") {
+					r = strings.TrimSpace(r)
+					if r != "" {
+						roles = append(roles, r)
+					}
+				}
+				inRolesBlock = false
+			} else {
+				inRolesBlock = true
+			}
+			continue
+		}
+
+		if inRolesBlock {
+			if strings.HasPrefix(trimmed, "- ") {
+				r := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+				if r != "" {
+					roles = append(roles, r)
+				}
+			} else {
+				inRolesBlock = false
+			}
+		}
+	}
+
+	// body 为 front matter 之后的内容
+	var sb strings.Builder
+	for i := endIdx + 1; i < len(lines); i++ {
+		sb.WriteString(lines[i])
+	}
+	body = sb.String()
+
+	return roles, body
 }
 
 // docLabelMap 文档名 → 中文标签

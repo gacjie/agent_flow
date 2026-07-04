@@ -18,10 +18,10 @@ auto_load_tools:
   - read_files
   - write_files
   - list_files
-  - list_work_docs
-  - read_work_docs
+  - context_lists
+  - read_contexts
   - task_lists
   - task_writers
-  - write_work_docs
-  - delete_work_docs
-  - analysis_work_docs
+  - write_contexts
+  - delete_contexts
+  - analysis_contexts

@@ -1,34 +1,63 @@
 # 编排速查
 
-## 阶段产物
+## 【工具选择】
 
-| 阶段 | 子阶段 | 责任人 | 关键产物 |
-|---|---|---|---|
-| 1. 需求分析 | — | olivia | `specs/requirement.md` |
-| 2. 设计与规划 | 2-A 架构规范 | archer | `specs/tech-spec.md`、`AGENTS.md` |
-| 2. 设计与规划 | 2-B 系统设计 | ethan（分步） | `specs/design.md`、`tasks/design-*` → `tasks/api-contract-*` |
-| 2. 设计与规划 | 2-B2 前端风格 | sophia（有前端时） | `specs/ui-patterns.md`、`tasks/ui-patterns-*` |
-| 2. 设计与规划 | 2-C 任务规划 | noah | 任务树 |
-| 3. 开发实施 | — | gavin/lucas/patrick/nathan/derek/emma | 代码变更 + 任务状态（一个 phase 一次 call_agent） |
-| 4. 验证与审查 | 4-A 测试验证 | liam | `tasks/test-report-*` + `tasks/test-report-e2e-*`（有前端时） |
-| 4. 验证与审查 | 4-B 代码审查 | alex | `tasks/review-round-*` |
-| 5. 完成汇报 | — | owen（条件调用 mia） | 直接回复用户 |
+| 目的 | 使用工具 | 使用时机 | 不要用于 |
+|------|---------|---------|---------|
+| 委派专业任务 | `call_agent` | 需求/设计/开发/测试/审查 | 编排师可自行完成的门控检查 |
+| 确认产物存在 | `context_lists` | 每次 call_agent 后门控 | 读取产物内容 |
+| 检查文档结构 | `read_contexts` / `analysis_contexts` | 门控需确认内容结构时 | 仅需确认文件存在时 |
+| 查看任务状态 | `task_lists` | 确认 phase 完成、读取修复问题 | 创建或更新任务 |
+| 创建/更新任务 | `task_writers` | 创建修复任务、更新阶段父任务状态 | 查看任务信息 |
+| 确认项目文件 | `read_files` / `list_files` | 门控验证 AGENTS.md/docs/ 存在 | 阅读大量代码细节 |
+| 管理工作文档 | `write_contexts` / `delete_contexts` | 写入修复任务文档或最终报告 | 替代专家写入专业产物 |
 
-## 路由规则
+## 【修复循环】
 
-- `[Backend:Go]` -> gavin
-- `[Backend:Python]` -> lucas
-- `[Backend:PHP]` -> patrick
-- `[Backend:Node]` -> nathan
-- `[Backend]` -> derek（通用全栈，处理无专用智能体的技术栈）
-- `[Frontend]` -> emma（优先）；derek 可作为前端 fallback
-- `[Test:*]` -> liam
-- `[Doc]` -> mia
+测试和审查共用此循环模式：
 
-## 动态裁剪要点
+1. 调用 liam/mia/alex 执行完整测试/审查，写入本轮报告。
+2. 用 `read_contexts` 读取报告正文；会话总结只能辅助判断，不得替代报告正文。
+3. 从报告提取问题 ID、技术栈标签、位置、根因和修复建议，按 `[Backend:*]` / `[Frontend]` 拆分。
+4. 按问题粒度创建带 `task_doc` 的修复任务，任务描述写明报告路径和指定问题 ID。
+5. 消失的问题视为已修复；新问题从 0 次计数；位置/根因一致的问题沿用原计数。
+6. 每轮修复后重新完整测试/复审；测试最多 5 轮，审查最多 3 轮。
 
-- 无前端：跳过 sophia（UI patterns）、跳过 liam E2E 验证
-- 已有项目：archer 更新而非重写 AGENTS.md
-- 小型单模块：ethan design + api-contract 可合为一文件；noah 可能只 1-2 个 phase
-- 纯 CLI/脚本：开发可能只有一个 phase 一次 call_agent
-- 文档更新：新增模块/改 API/改部署 → 调用 mia；纯重构/修复 → 不调用
+## 【路由规则】
+
+| 场景/标签 | 路由 |
+|----------|------|
+| 需求分析 | olivia |
+| 架构/系统/UI/任务规划 | archer / ethan / sophia / noah |
+| `[Backend]` / `[Backend:Go/Python/PHP/Node]` | mason；指令保留原始标签、目标文件和语言线索 |
+| `[Frontend]` 或展示层变更 | emma |
+| 前端测试报告中的 `[Backend]` 根因 | mason |
+| `[Test:Backend]` / `[Test:API]` / `[Test:Unit]` / `[Test:Integration]` | liam |
+| `[Test:Frontend]` / `[Test:E2E]` / `[Test:UI]` | mia |
+| `[Review]` | alex |
+
+## 【动态裁剪】
+
+- 无前端：跳过 sophia。前端测试仅纯 CLI/纯库/纯脚本可跳过
+- 已有项目首次接入：archer/ethan/sophia 从代码提取规范
+- 已有项目迭代：archer 更新而非重写，ethan/sophia 聚焦变更模块
+- 小型单模块：design + api-contract 可合为一文件；noah 可能只 1-2 个 phase
+
+## 【常见判断】
+
+| 遇到情况 | 正确做法 | 错误做法 |
+|---------|---------|---------|
+| 子智能体回复"完成"但无细节或未更新状态 | task_lists/context_lists 验证产物和状态 | 直接信任回复推进 |
+| 子智能体报告"部分完成" | 读产物确认完成部分，为未完成创建修复任务 | 整个阶段重新执行 |
+| 不确定是否需要前端风格设计 | 检查 requirement.md 是否涉及页面/UI | 默认跳过或默认执行 |
+| 多模块、混合技术栈或展示层/后端层混入同一 phase | 要求 noah 拆分 phase，并用 phase 顺序或任务描述表达依赖 | 直接派给某一个开发专家 |
+| scope 名像应用/服务/插件/包/页面域 | 检查 scope map 的层级类型和可验收性 | 直接当业务模块下发 |
+| phase 粒度覆盖多个业务能力 | 要求 noah 重排；上游设计过粗则要求 ethan/sophia 补拆 | 继续开发粗 phase |
+| 通用层依赖未先完成 | 暂停业务模块 phase，先执行通用层 phase | 让业务模块顺带实现通用层 |
+| 修复循环中问题变异 | 视为新问题重新计次 | 沿用旧问题计次 |
+| 小型修复只涉及 1 个文件 | 仍走五阶段但各阶段精简执行 | 跳过需求分析或设计 |
+| 专家将项目文档写入工作区 | 指令中标注"使用 write_files 写入项目目录" | 只写路径不标注工具 |
+| 后端开发任务有具体语言标签 | 仍统一调用 mason，并在指令中写明原始标签和语言线索 | 按语言标签调用旧后端专家 |
+| `[Backend]` 无语言标签 | 调用 mason，要求其先识别项目语言并读取对应语言技能 | owen 自己猜语言或改派旧专家 |
+| 模板视图依赖后端数据 | 拆成后端数据任务和前端展示任务 | 因耦合就合并给后端专家 |
+| 服务端模板同时改数据和展示 | 后端变量注入交 mason，模板结构/样式/交互交 emma | 一个 phase 下发给单一专家 |

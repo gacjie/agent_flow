@@ -41,11 +41,27 @@ var namePattern = regexp.MustCompile(`^[a-z_]+$`)
 var promptRegistry = map[string]PromptDef{
 	"system_rule": {
 		Name:        "system_rule",
-		Label:       "系统全局规则",
-		Description: "所有智能体共享的全局系统规则，注入到系统提示词的最顶层",
+		Label:       "系统环境信息",
+		Description: "系统环境信息（每次启动自动更新），注入到系统提示词的最顶层",
 		Category:    "系统",
 		IsTemplate:  false,
 		Default:     "你是一个 AI 智能体，请根据用户需求完成任务。遵循项目规范，使用工具高效执行。",
+	},
+	"global_rule": {
+		Name:        "global_rule",
+		Label:       "全局提示词",
+		Description: "跟随项目的全局提示词，所有会话共享，注入到 system.md 之后",
+		Category:    "系统",
+		IsTemplate:  false,
+		Default:     "",
+	},
+	"user_rule": {
+		Name:        "user_rule",
+		Label:       "用户自定义提示词",
+		Description: "用户自定义的全局提示词，文件不存在时跳过加载",
+		Category:    "系统",
+		IsTemplate:  false,
+		Default:     "",
 	},
 	"tidy_system": {
 		Name:        "tidy_system",
@@ -107,22 +123,20 @@ keywords 提取 5-15 个（函数名、类名、核心概念），summary 不超
 	},
 }
 
-var promptOrder = []string{"system_rule", "tidy_system", "keyword_extract", "conv_summary", "prompt_enhance", "vision_parse"}
+var promptOrder = []string{"system_rule", "global_rule", "user_rule", "tidy_system", "keyword_extract", "conv_summary", "prompt_enhance", "vision_parse"}
 
 func NewPromptService() *PromptService {
 	svc := &PromptService{
 		contextRoot: config.Get().Agent.ContextRoot,
 	}
-	svc.ensureSystemRule()
+	svc.refreshSystemRule()
+	svc.ensureGlobalRule()
 	return svc
 }
 
-// ensureSystemRule 如果 context/system.md 不存在，自动生成包含系统环境信息的默认内容
-func (s *PromptService) ensureSystemRule() {
+// refreshSystemRule 每次启动自动生成/更新 context/system.md（收集本地环境信息）
+func (s *PromptService) refreshSystemRule() {
 	path := s.filePath("system_rule")
-	if _, err := os.Stat(path); err == nil {
-		return
-	}
 	content := generateSystemRuleContent()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		slog.Warn("创建 system.md 目录失败", "error", err)
@@ -132,7 +146,24 @@ func (s *PromptService) ensureSystemRule() {
 		slog.Warn("自动生成 system.md 失败", "error", err)
 		return
 	}
-	slog.Info("已自动生成 context/system.md", "path", path)
+	slog.Info("已自动更新 context/system.md", "path", path)
+}
+
+// ensureGlobalRule 如果 context/global.md 不存在，创建空文件
+func (s *PromptService) ensureGlobalRule() {
+	path := s.filePath("global_rule")
+	if _, err := os.Stat(path); err == nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		slog.Warn("创建 global.md 目录失败", "error", err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(""), 0644); err != nil {
+		slog.Warn("创建 global.md 失败", "error", err)
+		return
+	}
+	slog.Info("已创建 context/global.md", "path", path)
 }
 
 func detectRuntimeEnv(name string, candidates []string) (cmd string, version string) {
@@ -225,10 +256,16 @@ func generateSystemRuleContent() string {
 }
 
 func (s *PromptService) filePath(name string) string {
-	if name == "system_rule" {
+	switch name {
+	case "system_rule":
 		return filepath.Join(s.contextRoot, "system.md")
+	case "global_rule":
+		return filepath.Join(s.contextRoot, "global.md")
+	case "user_rule":
+		return filepath.Join(s.contextRoot, "user.md")
+	default:
+		return filepath.Join(s.contextRoot, "prompt", name+".md")
 	}
-	return filepath.Join(s.contextRoot, "prompt", name+".md")
 }
 
 func (s *PromptService) readFile(name string) string {
@@ -311,6 +348,11 @@ func (s *PromptService) ResetToDefault(name string) error {
 	}
 	if _, ok := promptRegistry[name]; !ok {
 		return fmt.Errorf("提示词 %q 不存在", name)
+	}
+	if name == "system_rule" {
+		s.refreshSystemRule()
+		slog.Info("系统提示词已重置（重新生成环境信息）", "name", name)
+		return nil
 	}
 	path := s.filePath(name)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {

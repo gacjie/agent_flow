@@ -195,6 +195,23 @@
             </div>
 
             <div class="form-control">
+                <label class="form-label">项目文档角色标签</label>
+                <p class="text-sm opacity-60 mb-2">逗号分隔，决定该智能体加载项目 docs/ 下哪些文档。留空则不加载任何 docs/ 文档</p>
+                <input type="text" name="doc_roles" value="{{.FormItem.DocRoles}}"
+                       class="input" placeholder="backend,frontend,test,review" maxlength="200">
+                <details class="mt-2">
+                    <summary class="text-sm opacity-60 cursor-pointer" style="list-style:none">
+                        <span style="margin-right:4px">▸</span>查看标签说明
+                    </summary>
+                    <div class="text-sm opacity-60 mt-1" style="padding-left:1rem">
+                        <p>内置标签：backend（后端）、frontend（前端）、test（测试）、review（审查）、design（设计）、docs（文档）</p>
+                        <p class="mt-1">匹配规则：docs/ 下的 .md 文件通过 YAML 前置元数据的 roles 字段声明标签，与此处配置取交集匹配</p>
+                        <p class="mt-1">支持自定义标签，只需 docs/ 文档的 roles 中包含对应标签即可匹配</p>
+                    </div>
+                </details>
+            </div>
+
+            <div class="form-control">
                 <label class="form-label">图标</label>
                 <input type="text" name="icon" value="{{.FormItem.Icon}}"
                        class="input" placeholder="图标标识" maxlength="50">

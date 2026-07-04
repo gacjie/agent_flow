@@ -16,7 +16,7 @@ func NewBuilder() *Builder {
 }
 
 // Build 根据参数构建完整的 system prompt
-// 统一加载顺序：System → Project → Specs文档 → Role（含 rule/workflow/skill/memory） → 关联技能 → TaskSummary
+// 统一加载顺序：System（system.md + global.md + user.md） → Project → Specs文档 → Role（含 rule/workflow/skill/memory） → 关联技能 → TaskSummary
 func (b *Builder) Build(params ContextParams) BuildResult {
 	var blocks []ContextBlock
 
@@ -25,6 +25,11 @@ func (b *Builder) Build(params ContextParams) BuildResult {
 
 	// 2. 项目级上下文（从实际项目路径加载 AGENTS.md/CONTEXT.md/README.md）
 	blocks = append(blocks, b.Loader.LoadProject(params.ProjectPath)...)
+
+	// 2.5 项目级专项文档（docs/*.md，按 AgentDocRoles 过滤）
+	if params.ProjectPath != "" && len(params.AgentDocRoles) > 0 {
+		blocks = append(blocks, b.Loader.LoadProjectDocs(params.ProjectPath, params.AgentDocRoles)...)
+	}
 
 	// 3. 工作文档（specs/ 目录）
 	if params.WorkDocsDir != "" {

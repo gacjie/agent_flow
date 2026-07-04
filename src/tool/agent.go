@@ -7,9 +7,25 @@ import (
 	"strings"
 )
 
+// WriteAgentOpts write_agent 工具的参数结构
+type WriteAgentOpts struct {
+	Title           string
+	Description     string
+	Keywords        string
+	RolePrompt      string
+	ModelID         string
+	DocRoles        string
+	AutoLoadFiles   string
+	AutoLoadTools   string
+	RuleContent     string
+	SkillContent    string
+	WorkflowContent string
+	MemoryContent   string
+}
+
 // AgentWriter 写入 Agent 的接口（按 name 自动判断创建/更新，由 service.AgentService 实现）
 type AgentWriter interface {
-	WriteAgentFromTool(name, title, description, keywords, rolePrompt string, modelID string) (uint, bool, error)
+	WriteAgentFromTool(name string, opts WriteAgentOpts) (uint, bool, error)
 }
 
 // AgentLister 列出 Agent 的接口
@@ -44,8 +60,15 @@ func (t *WriteAgentTool) Parameters() json.RawMessage {
 			"title": {"type": "string", "description": "显示名称（创建时必填）"},
 			"description": {"type": "string", "description": "功能描述"},
 			"keywords": {"type": "string", "description": "关键词，逗号分隔"},
-			"role_prompt": {"type": "string", "description": "系统提示词（定义角色的人设和行为规范）"},
-			"model_id": {"type": "string", "description": "关联的模型 ID（如 claude-opus-4.6），空字符串表示不绑定"}
+			"role_prompt": {"type": "string", "description": "角色设定内容（role.md）"},
+			"model_id": {"type": "string", "description": "关联的模型 ID（如 claude-opus-4.6），空字符串表示不绑定"},
+			"doc_roles": {"type": "string", "description": "项目文档角色标签，逗号分隔（如 backend,frontend,review）"},
+			"auto_load_files": {"type": "string", "description": "自动加载文件类型 JSON 数组（如 [\"role\",\"rule\",\"workflow\",\"skill\",\"memory\"]）"},
+			"auto_load_tools": {"type": "string", "description": "自动加载工具 JSON 数组（如 [\"read_files\",\"write_files\"]）"},
+			"rule_content": {"type": "string", "description": "角色规则内容（rule.md）"},
+			"skill_content": {"type": "string", "description": "角色技能速查内容（skill.md）"},
+			"workflow_content": {"type": "string", "description": "工作流程内容（workflow.md）"},
+			"memory_content": {"type": "string", "description": "角色记忆内容（memory.md）"}
 		},
 		"required": ["name"]
 	}`)
@@ -53,12 +76,19 @@ func (t *WriteAgentTool) Parameters() json.RawMessage {
 
 func (t *WriteAgentTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Name        string `json:"name"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Keywords    string `json:"keywords"`
-		RolePrompt  string `json:"role_prompt"`
-		ModelID     string `json:"model_id"`
+		Name            string `json:"name"`
+		Title           string `json:"title"`
+		Description     string `json:"description"`
+		Keywords        string `json:"keywords"`
+		RolePrompt      string `json:"role_prompt"`
+		ModelID         string `json:"model_id"`
+		DocRoles        string `json:"doc_roles"`
+		AutoLoadFiles   string `json:"auto_load_files"`
+		AutoLoadTools   string `json:"auto_load_tools"`
+		RuleContent     string `json:"rule_content"`
+		SkillContent    string `json:"skill_content"`
+		WorkflowContent string `json:"workflow_content"`
+		MemoryContent   string `json:"memory_content"`
 	}
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
@@ -70,10 +100,22 @@ func (t *WriteAgentTool) Execute(ctx context.Context, args string) *Result {
 		return ErrorResult("系统错误: AgentWriter 未初始化")
 	}
 
-	id, created, err := t.AgentWriter.WriteAgentFromTool(
-		params.Name, params.Title, params.Description,
-		params.Keywords, params.RolePrompt, params.ModelID,
-	)
+	opts := WriteAgentOpts{
+		Title:           params.Title,
+		Description:     params.Description,
+		Keywords:        params.Keywords,
+		RolePrompt:      params.RolePrompt,
+		ModelID:         params.ModelID,
+		DocRoles:        params.DocRoles,
+		AutoLoadFiles:   params.AutoLoadFiles,
+		AutoLoadTools:   params.AutoLoadTools,
+		RuleContent:     params.RuleContent,
+		SkillContent:    params.SkillContent,
+		WorkflowContent: params.WorkflowContent,
+		MemoryContent:   params.MemoryContent,
+	}
+
+	id, created, err := t.AgentWriter.WriteAgentFromTool(params.Name, opts)
 	if err != nil {
 		return ErrorResult("写入智能体失败: " + err.Error())
 	}

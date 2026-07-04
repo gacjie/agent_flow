@@ -59,7 +59,7 @@ func (c *AgentCtrl) List(w http.ResponseWriter, r *http.Request) {
 
 // CreateForm 创建 AI 智能体表单页面
 func (c *AgentCtrl) CreateForm(w http.ResponseWriter, r *http.Request) {
-	models, _ := c.ModelService.ListAll()
+	models, _ := c.ModelService.ListDistinct()
 	skills, _ := c.SkillService.ListAll()
 
 	// 默认勾选所有内置工具
@@ -120,6 +120,7 @@ func (c *AgentCtrl) Create(w http.ResponseWriter, r *http.Request) {
 		WorkflowContent: r.FormValue("workflow_content"),
 		AutoLoadFiles:   marshalCheckboxValues(r.Form["auto_load_files"]),
 		AutoLoadTools:   marshalCheckboxValues(r.Form["auto_load_tools"]),
+		DocRoles:        r.FormValue("doc_roles"),
 		Icon:            r.FormValue("icon"),
 		SkillIDs:        skillIDs,
 	}
@@ -157,7 +158,7 @@ func (c *AgentCtrl) EditForm(w http.ResponseWriter, r *http.Request) {
 	// 从文件系统读取内容字段（供表单回显）
 	content := c.Service.GetAgentContent(agent.Name)
 
-	models, _ := c.ModelService.ListAll()
+	models, _ := c.ModelService.ListDistinct()
 	skills, _ := c.SkillService.ListAll()
 	skillIDs := c.Service.GetSkillIDs(uint(id))
 	skillIDMap := make(map[uint]bool)
@@ -205,6 +206,7 @@ func (c *AgentCtrl) Update(w http.ResponseWriter, r *http.Request) {
 	workflowContent := r.FormValue("workflow_content")
 	autoLoadFiles := marshalCheckboxValues(r.Form["auto_load_files"])
 	autoLoadTools := marshalCheckboxValues(r.Form["auto_load_tools"])
+	docRoles := r.FormValue("doc_roles")
 	icon := r.FormValue("icon")
 
 	// 解析技能 ID 列表
@@ -228,6 +230,7 @@ func (c *AgentCtrl) Update(w http.ResponseWriter, r *http.Request) {
 		WorkflowContent: &workflowContent,
 		AutoLoadFiles:   &autoLoadFiles,
 		AutoLoadTools:   &autoLoadTools,
+		DocRoles:        &docRoles,
 		Icon:            &icon,
 		Status:          &status,
 		SkillIDs:        skillIDs,

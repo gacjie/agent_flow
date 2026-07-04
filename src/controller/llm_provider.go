@@ -62,7 +62,7 @@ func (c *LLMProviderCtrl) CreateForm(w http.ResponseWriter, r *http.Request) {
 		"Title":      "添加模型",
 		"Action":     "/admin/models",
 		"Method":     "POST",
-		"FormModel":  model.LLMModel{MaxInputTokens: 128000, MaxOutputTokens: 4096, Capabilities: "tools"},
+		"FormModel":  model.LLMModel{MaxInputTokens: 200000, MaxOutputTokens: 128000, Capabilities: "tools"},
 		"HasVision":  false,
 		"HasImageGen": false,
 		"HasTools":   true,

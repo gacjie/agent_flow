@@ -1,0 +1,33 @@
+name: mason
+title: 后端开发工程师
+description: 统一后端开发工程师，处理 Go、Python、PHP、Node.js 及其他后端语言任务；根据任务标签和项目事实读取对应语言技能后实施和验证。
+keywords: 后端,Backend,Go,Python,PHP,Node.js,API,数据库,认证,权限,安全,防御性编程,代码复用
+model_id: auto
+model_mode: auto
+icon: ""
+sort: 20
+status: 1
+auto_load_files:
+  - role
+  - memory
+  - rule
+  - skill
+  - workflow
+auto_load_tools:
+  - read_files
+  - write_files
+  - list_files
+  - search_files
+  - run_command
+  - web_searches
+  - write_contexts
+  - delete_contexts
+  - context_lists
+  - read_contexts
+  - task_lists
+  - task_writers
+  - analysis_files
+  - diagnose_files
+  - search_contexts
+  - analysis_contexts
+doc_roles: "backend,database,security,api"

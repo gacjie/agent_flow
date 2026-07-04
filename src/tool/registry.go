@@ -110,10 +110,6 @@ func DefaultRegistry() *Registry {
 	r.Register(&RunCommandTool{})
 	r.Register(&UpdateMemoryTool{})
 	// WebSearchTool 在 router.go 中带 ConfigGetter 依赖注册
-	r.Register(&WriteWorkDocTool{})
-	r.Register(&ListWorkDocsTool{})
-	r.Register(&ReadWorkDocTool{})
-	r.Register(&DeleteWorkDocTool{})
 	r.Register(&ReadContextTool{})
 	r.Register(&WriteContextTool{})
 	r.Register(&DeleteContextTool{})
@@ -121,7 +117,6 @@ func DefaultRegistry() *Registry {
 	r.Register(&SearchContextTool{})
 	r.Register(&BrowserActionTool{})
 	r.Register(&AnalysisFileTool{})
-	r.Register(&AnalysisWorkDocTool{})
 	r.Register(&AnalysisContextTool{})
 	r.Register(&DiagnoseFilesTool{})
 	return r

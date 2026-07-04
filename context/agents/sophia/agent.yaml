@@ -21,11 +21,12 @@ auto_load_tools:
   - search_files
   - web_searches
   - browser_action
-  - write_work_docs
-  - delete_work_docs
-  - list_work_docs
-  - read_work_docs
+  - write_contexts
+  - delete_contexts
+  - context_lists
+  - read_contexts
   - task_lists
   - analysis_files
+doc_roles: "frontend"
 skills:
   - css-methodology

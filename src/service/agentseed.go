@@ -27,6 +27,7 @@ type AgentSeedConfig struct {
 	Status        int      `yaml:"status"`
 	AutoLoadFiles []string `yaml:"auto_load_files"`
 	AutoLoadTools []string `yaml:"auto_load_tools"`
+	DocRoles      string   `yaml:"doc_roles"`
 	Skills        []string `yaml:"skills"`
 }
 
@@ -149,6 +150,7 @@ func (s *AgentSeedService) upsert(cfg *AgentSeedConfig) error {
 				Status:        status,
 				AutoLoadFiles: string(autoLoadFiles),
 				AutoLoadTools: string(autoLoadTools),
+				DocRoles:      cfg.DocRoles,
 			}
 			if err := tx.Create(&agent).Error; err != nil {
 				return fmt.Errorf("创建智能体失败: %w", err)
@@ -167,6 +169,7 @@ func (s *AgentSeedService) upsert(cfg *AgentSeedConfig) error {
 				"status":          status,
 				"auto_load_files": string(autoLoadFiles),
 				"auto_load_tools": string(autoLoadTools),
+				"doc_roles":       cfg.DocRoles,
 			}
 			if err := tx.Model(&existing).Updates(updates).Error; err != nil {
 				return fmt.Errorf("更新智能体失败: %w", err)

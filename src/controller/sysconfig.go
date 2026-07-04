@@ -31,11 +31,11 @@ func (c *SysConfigCtrl) Edit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if c.ModelService != nil {
-		models, _ := c.ModelService.ListAll()
+		models, _ := c.ModelService.ListDistinct()
 		data["Models"] = models
-		visionModels, _ := c.ModelService.ListByCapability("vision")
+		visionModels, _ := c.ModelService.ListDistinctByCapability("vision")
 		data["VisionModels"] = visionModels
-		imageGenModels, _ := c.ModelService.ListByCapability("image_gen")
+		imageGenModels, _ := c.ModelService.ListDistinctByCapability("image_gen")
 		data["ImageGenModels"] = imageGenModels
 	}
 

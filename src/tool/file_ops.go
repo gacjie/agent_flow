@@ -56,6 +56,7 @@ func isSubPath(path, base string) bool {
 type writeOp struct {
 	Content string
 	OldText string
+	Mode    string
 }
 
 // fileOp 文件操作项（context_ops 等共用）
@@ -64,14 +65,13 @@ type fileOp = writeOp
 // editItem 编辑操作项（context_ops 等共用）
 type editItem = files.EditItem
 
-// imageExtensions 支持的图片扩展名
+// imageExtensions 二进制图片扩展名（文本格式图片如 SVG 直接读取文本，不走图片管道）
 var imageExtensions = map[string]string{
 	".png":  "image/png",
 	".jpg":  "image/jpeg",
 	".jpeg": "image/jpeg",
 	".gif":  "image/gif",
 	".webp": "image/webp",
-	".svg":  "image/svg+xml",
 	".bmp":  "image/bmp",
 }
 
@@ -89,7 +89,7 @@ type ReadFileTool struct{}
 func (t *ReadFileTool) Name() string { return "read_files" }
 
 func (t *ReadFileTool) Description() string {
-	return "读取项目目录下文件的内容，各文件并行读取，结果以分隔块格式返回。支持 offset/limit 按行读取。支持读取图片文件（png/jpg/gif/webp/svg/bmp），图片将以视觉内容返回供分析。注意：此工具操作项目代码目录，无法读取工作区文档（工作区文档由系统自动加载到上下文）。"
+	return "读取项目目录下文件的内容，各文件并行读取，结果以分隔块格式返回。支持 offset/limit 按行读取。支持读取二进制图片文件（png/jpg/gif/webp/bmp），图片将以视觉内容返回供分析；文本格式图片（如 SVG）以源码文本返回。注意：此工具操作项目代码目录，无法读取工作区文档（工作区文档由系统自动加载到上下文）。"
 }
 
 func (t *ReadFileTool) Parameters() json.RawMessage {
@@ -218,7 +218,7 @@ type WriteFileTool struct{}
 func (t *WriteFileTool) Name() string { return "write_files" }
 
 func (t *WriteFileTool) Description() string {
-	return "创建、覆盖或编辑项目目录下的文件，自动创建不存在的父目录。当 old_text 为空时创建或覆盖整个文件；当 old_text 非空时搜索替换编辑（old_text 必须在文件中唯一匹配）。同一文件的多处编辑合并为原子读写（按数组顺序依次应用），不同文件并行处理。此工具操作项目代码目录，写工作文档请使用 write_work_docs。\n\n注意：单次调用不宜过多（写入建议单文件不超过 300 行，编辑建议不超过 10 处），超出请分多次调用。"
+	return "创建、覆盖或编辑项目目录下的文件，自动创建不存在的父目录。当 old_text 为空时创建或覆盖整个文件；当 old_text 非空时搜索替换编辑（old_text 必须在文件中唯一匹配）。同一文件的多处编辑合并为原子读写（按数组顺序依次应用），不同文件并行处理。此工具操作项目代码目录，写工作文档请使用 write_contexts。\n\n注意：单次调用不宜过多（写入建议单文件不超过 300 行，编辑建议不超过 10 处），超出请分多次调用。"
 }
 
 func (t *WriteFileTool) Parameters() json.RawMessage {
@@ -278,7 +278,7 @@ parsed:
 			if _, exists := fileOps[f.Path]; !exists {
 				pathOrder = append(pathOrder, f.Path)
 			}
-			fileOps[f.Path] = append(fileOps[f.Path], writeOp{f.Content, f.OldText})
+			fileOps[f.Path] = append(fileOps[f.Path], writeOp{Content: f.Content, OldText: f.OldText})
 		}
 
 		n := len(pathOrder)
@@ -432,7 +432,7 @@ type DeleteFileTool struct{}
 func (t *DeleteFileTool) Name() string { return "delete_files" }
 
 func (t *DeleteFileTool) Description() string {
-	return "删除项目目录下的文件或空目录，并行执行。仅允许删除文件和空目录，不允许递归删除非空目录。此工具操作项目代码目录，删除工作区文档请使用 delete_work_docs。"
+	return "删除项目目录下的文件或空目录，并行执行。仅允许删除文件和空目录，不允许递归删除非空目录。此工具操作项目代码目录，删除工作区文档请使用 delete_contexts。"
 }
 
 func (t *DeleteFileTool) Parameters() json.RawMessage {
@@ -523,7 +523,7 @@ type ListFilesTool struct{}
 func (t *ListFilesTool) Name() string { return "list_files" }
 
 func (t *ListFilesTool) Description() string {
-	return "列出项目目录下的文件和子目录，支持 glob 模式匹配和递归遍历。注意：此工具操作项目代码目录，查看工作区文档请使用 list_work_docs。"
+	return "列出项目目录下的文件和子目录，支持 glob 模式匹配和递归遍历。注意：此工具操作项目代码目录，查看工作区文档请使用 context_lists。"
 }
 
 func (t *ListFilesTool) Parameters() json.RawMessage {

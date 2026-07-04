@@ -104,10 +104,10 @@ func (s *LLMModelService) Create(req *model.LLMModelCreateReq) (*model.LLMModel,
 	}
 
 	if m.MaxInputTokens == 0 {
-		m.MaxInputTokens = 128000
+		m.MaxInputTokens = 200000
 	}
 	if m.MaxOutputTokens == 0 {
-		m.MaxOutputTokens = 4096
+		m.MaxOutputTokens = 128000
 	}
 
 	m.APIKey = s.encryptKey(req.APIKey)
@@ -176,6 +176,36 @@ func (s *LLMModelService) ListByCapability(cap string) ([]model.LLMModel, error)
 	var items []model.LLMModel
 	err := s.DB.Where("capabilities LIKE ?", "%"+cap+"%").Order("id ASC").Find(&items).Error
 	return items, err
+}
+
+// ListDistinct 返回按 ModelID 去重后的模型列表（供前端下拉选择，每个 model_id 只保留第一条）
+func (s *LLMModelService) ListDistinct() ([]model.LLMModel, error) {
+	items, err := s.ListAll()
+	if err != nil {
+		return nil, err
+	}
+	return deduplicateByModelID(items), nil
+}
+
+// ListDistinctByCapability 返回按 ModelID 去重后的、含指定能力的模型列表
+func (s *LLMModelService) ListDistinctByCapability(cap string) ([]model.LLMModel, error) {
+	items, err := s.ListByCapability(cap)
+	if err != nil {
+		return nil, err
+	}
+	return deduplicateByModelID(items), nil
+}
+
+func deduplicateByModelID(items []model.LLMModel) []model.LLMModel {
+	seen := make(map[string]bool, len(items))
+	result := make([]model.LLMModel, 0, len(items))
+	for _, item := range items {
+		if !seen[item.ModelID] {
+			seen[item.ModelID] = true
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 // GetByIDs 按主键批量查询模型
@@ -521,12 +551,6 @@ func (s *LLMModelService) fetchGeminiModels(baseURL, apiKey string) ([]UpstreamM
 func inferMaxInputTokens(modelID string) int {
 	id := strings.ToLower(modelID)
 	switch {
-	case strings.Contains(id, "gpt-4o"), strings.Contains(id, "gpt-4-turbo"):
-		return 128000
-	case strings.Contains(id, "gpt-4"):
-		return 8192
-	case strings.Contains(id, "gpt-3.5"):
-		return 16385
 	case strings.Contains(id, "claude-3"), strings.Contains(id, "claude-sonnet"), strings.Contains(id, "claude-opus"), strings.Contains(id, "claude-haiku"):
 		return 200000
 	case strings.Contains(id, "gemini-1.5"), strings.Contains(id, "gemini-2"):
@@ -534,11 +558,11 @@ func inferMaxInputTokens(modelID string) int {
 	case strings.Contains(id, "gemini"):
 		return 32768
 	case strings.Contains(id, "deepseek"):
-		return 128000
+		return 1000000
 	case strings.Contains(id, "qwen"):
 		return 131072
 	default:
-		return 128000
+		return 200000
 	}
 }
 
@@ -546,12 +570,6 @@ func inferMaxInputTokens(modelID string) int {
 func inferMaxOutputTokens(modelID string) int {
 	id := strings.ToLower(modelID)
 	switch {
-	case strings.Contains(id, "gpt-4o"):
-		return 16384
-	case strings.Contains(id, "gpt-4"):
-		return 4096
-	case strings.Contains(id, "gpt-3.5"):
-		return 4096
 	case strings.Contains(id, "claude-3-5"), strings.Contains(id, "claude-sonnet-4"), strings.Contains(id, "claude-opus"):
 		return 8192
 	case strings.Contains(id, "claude"):
@@ -559,9 +577,9 @@ func inferMaxOutputTokens(modelID string) int {
 	case strings.Contains(id, "gemini"):
 		return 8192
 	case strings.Contains(id, "deepseek"):
-		return 8192
+		return 128000
 	default:
-		return 4096
+		return 128000
 	}
 }
 
@@ -570,8 +588,6 @@ func inferCapabilities(modelID string) string {
 	id := strings.ToLower(modelID)
 	caps := []string{"tools"}
 	switch {
-	case strings.Contains(id, "gpt-4o"), strings.Contains(id, "gpt-4-turbo"), strings.Contains(id, "gpt-4-vision"):
-		caps = append(caps, "vision")
 	case strings.Contains(id, "claude-3"), strings.Contains(id, "claude-sonnet"), strings.Contains(id, "claude-opus"), strings.Contains(id, "claude-haiku"):
 		caps = append(caps, "vision")
 	case strings.Contains(id, "gemini"):

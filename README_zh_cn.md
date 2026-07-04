@@ -2,298 +2,127 @@
 
 [English](README.md)
 
-[![QQ群](https://img.shields.io/badge/QQ群-311977510-blue?logo=tencentqq)](https://qm.qq.com/q/83vcaA7Ady)
+AgentFlow 是开箱即用的 AI 智能体工作流系统，用于在 Web 控制台或移动客户端中管理多智能体工作区、流式对话、项目工具、任务跟踪、模型配置和 MCP 工具。
 
-**交流群**：[AgentFlow交流群](https://qm.qq.com/q/83vcaA7Ady)（QQ群号：311977510）
+## 功能概览
 
-开箱即用的 AI 智能体工作流系统。基于 Go 语言构建，单二进制部署，内嵌前端界面和 SQLite 数据库。
+### 登录与账号
 
-## 赞助商
+- 使用管理员账号和验证码登录。
+- 默认管理员可由配置中的 `admin_user` 和 `admin_password` 创建；首次登录可要求修改密码。
+- 在账号菜单中维护个人资料和修改密码。
+- 通过角色权限控制控制台、工作台、模型、智能体、技能、MCP 工具、项目、成员、角色、提示词、系统工具和系统配置的访问。
 
-| | 赞助商 | 说明 |
-|--|--------|------|
-| 🖥️ | [弘速云](https://www.hosuyun.cn) | 香港高性能云服 8核8G 19.9/月 |
-| 🔑 | [Synai996 AI Gateway](https://synai996.space) | 稳定接入 Claude、GPT、Gemini、DeepSeek 等主流模型 |
-| 🔑 | [刀哥 AI Gateway](https://www.codexapis.com) | 高速稳定的GPT Codex Pro 号池API |
+### 模型管理
 
-## 特性
-
-- **多智能体编排** — 内置智能体 + 自定义创建，支持角色/规则/工作流/技能/记忆配置
-- **实时工作台** — 基于 SSE 的流式对话界面，支持断线重连
-- **28 个内置工具** — 文件操作、Shell 命令、浏览器自动化、记忆管理、任务规划等
-- **MCP 工具集成** — 通过 Model Context Protocol 扩展外部工具（stdio JSON-RPC）
-- **多 LLM 支持** — OpenAI、Anthropic Claude、Google Gemini 及 OpenAI 兼容 API
-- **分阶段任务管理** — 将复杂工作拆解为带依赖关系的分阶段任务
-- **项目与工作区隔离** — 每个工作区拥有独立数据库和文件目录
-- **RBAC 权限控制** — 基于角色的权限系统，34 个权限节点
-- **移动客户端** — 基于 UniApp 的 Android/H5 客户端，支持 SSE 流式对话和多服务器管理
-- **日夜双主题** — 原生 CSS/JS 前端，支持明暗主题切换
-- **零依赖部署** — 单二进制文件，无需外部运行时
-
-## 架构
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                       前端层                             │
-│         原生 CSS/JS + html/template + go:embed           │
-├─────────────────────────────────────────────────────────┤
-│                    移动客户端（APP）                      │
-│        UniApp (Vue 3) — Android / H5 / iOS              │
-├─────────────────────────────────────────────────────────┤
-│                      HTTP 层                             │
-│        Chi v5 路由 + 中间件栈（CSRF、认证、               │
-│        CORS、安全头、异常恢复）                           │
-├─────────────────────────────────────────────────────────┤
-│                      控制器层                            │
-│       21 个控制器（CRUD + 工作台 SSE + 文档）            │
-├─────────────────────────────────────────────────────────┤
-│                      服务层                              │
-│  ChatRunner │ RunnerManager │ TidyUp │ TaskPlanner      │
-│  Auth │ Agent │ Skill │ Tool │ Workspace │ Indexer      │
-├─────────────────────────────────────────────────────────┤
-│                     工具系统                             │
-│  Registry + Executor + MCP Manager + 28 个内置工具      │
-├──────────────────────┬──────────────────────────────────┤
-│     LLM 提供商       │           数据层                  │
-│  OpenAI │ Anthropic  │  GORM + SQLite（主库）            │
-│  Gemini │ Responses  │  每工作区独立 working.db          │
-└──────────────────────┴──────────────────────────────────┘
-```
-
-**技术栈：**
-
-| 层级 | 技术 |
-|------|------|
-| 语言 | Go 1.25 |
-| 路由 | chi/v5 |
-| ORM | GORM（纯 Go SQLite 驱动） |
-| 前端 | 原生 CSS/JS、html/template、go:embed |
-| 移动端 | UniApp (Vue 3) — Android / H5 |
-| 配置 | Viper（YAML + 环境变量） |
-| 日志 | slog（标准库） |
-
-## 目录结构
-
-```
-agent_flow/
-├── main.go                     # 入口：配置→数据库→迁移→种子数据→路由→启动
-├── config/
-│   └── config.yaml             # 配置文件（server/database/auth/agent/llm）
-├── context/
-│   ├── agents/                 # 内置智能体定义（agent.yaml + 提示词文件）
-│   ├── skills/                 # 内置技能（Markdown 文件）
-│   └── prompt/                 # 系统提示词模板
-├── app/                        # 移动客户端（UniApp + Vue 3）
-│   ├── pages/                  # 页面（服务器列表、登录、工作台、对话、任务）
-│   ├── utils/                  # API 封装、SSE 处理、本地存储管理
-│   └── manifest.json           # 应用配置（平台/权限/版本）
-└── src/
-    ├── common/                 # 公共工具（响应/错误/加密/校验）
-    ├── config/                 # 配置结构体 + 加载器
-    ├── database/               # 数据库初始化
-    ├── logger/                 # 按天轮转日志处理器
-    ├── model/                  # GORM 模型（17 个）
-    ├── service/                # 业务逻辑（25 个服务）
-    ├── controller/             # HTTP 处理器（21 个控制器）
-    ├── tool/                   # 工具系统（28 个内置 + MCP 适配器）
-    │   ├── files/              # 文件操作实现
-    │   ├── tasks/              # 任务操作辅助
-    │   └── browsers/           # 浏览器自动化（chromedp）
-    ├── agentctx/               # 上下文构建器（5 层提示词组装）
-    ├── provider/               # LLM 客户端（OpenAI/Anthropic/Gemini）
-    ├── middleware/             # 认证、CSRF、CORS、安全头、日志、异常恢复
-    ├── router/                 # 路由注册
-    └── view/
-        ├── static/             # CSS + JS 静态资源
-        └── template/           # HTML 模板（布局 + 页面）
-```
-
-## 功能说明
+- 添加和管理以下协议的模型：
+  - OpenAI 兼容 Chat Completions
+  - OpenAI Responses
+  - Anthropic Claude
+  - Google Gemini
+- 配置显示名称、本地模型 ID、上游模型 ID、Base URL、API Key、Token 上限和推理强度。
+- 使用 `tools`、`vision`、`image_gen` 标记模型能力。
+- 将模型加入自动切换/故障回退列表。
+- 在模型列表中测试连通性。
+- 在上游支持时拉取可用模型列表。
+- 通过 JSON 导入和导出模型配置。
 
 ### 工作台
 
-统一的 AI 交互界面。选择工作区和智能体后，即可与 AI 实时对话，AI 可调用工具自主执行任务。
+- 在工作台中选择、创建和删除工作区。
+- 创建、打开、删除和停止会话。
+- 通过 SSE 流式接收智能体回复。
+- 重新连接正在运行的会话，并回放可用的流式事件。
+- 为会话切换当前智能体。
+- 查看助手文本、思考内容、工具调用和工具结果。
+- 使用主会话，以及由智能体委派创建的子会话。
+- 发送前对输入内容进行提示词增强。
+- 停止正在运行的任务，同时保留会话历史。
 
-- SSE 流式推送，200 事件环形缓冲支持断线重连回放
-- 后台任务执行独立于 HTTP 连接
-- 多订阅者支持（多浏览器标签页）
-- 子智能体调用，支持复杂多步工作流
+### 附件与文件
 
-### 智能体系统
+- 上传图片、文本文件、Markdown 文件、PDF 等支持的附件。
+- 预览上传的图片附件，并在发送前移除待发送附件。
+- 浏览当前工作区的上传文件和浏览器截图。
+- 读取并保存可编辑的上传文本内容。
+- 在绑定项目路径的工作区中浏览项目文件。
+- 读取已有项目文件，并保存对已有文件的编辑。
+- 查看和保存工作区 `specs/`、`tasks/` 下的文档。
+- 查看和保存项目中的 `AGENTS.md`、`README.md` 以及 `docs/` 下的 Markdown 文档。
 
-- **内置智能体** — 从 `context/agents/` 加载的预配置智能体
-- **自定义智能体** — 通过界面创建，配置角色、规则、工作流、技能和记忆
-- **加载控制** — 精细控制每个智能体可访问的文件和工具
-- **智能体记忆** — 跨工作区持久记忆，基于差异模式更新
-- **子智能体调用** — 智能体可将工作委派给其他智能体
+### 项目与工作区
 
-### 工具系统
+- 创建带名称、描述和项目路径的项目。
+- 在项目下创建工作区，也可以直接从工作台创建工作区。
+- 为工作区绑定默认智能体。
+- 按工作区 UUID 隔离工作区数据。
+- 查看工作区任务列表和任务进度。
+- 在没有会话运行时删除工作区及其工作区文件。
 
-28 个内置工具按类别组织：
+### 智能体与技能
 
-| 类别 | 工具 |
-|------|------|
-| 文件操作 | `read_files`、`write_files`、`delete_files`、`list_files`、`search_files`、`analysis_files`、`diagnose_files` |
-| 命令执行 | `run_command` |
-| 浏览器 | `browser_action`（chromedp 驱动 headless 浏览器） |
-| 记忆 | `update_memories` |
-| 网络搜索 | `web_searches` |
-| 工作区文档 | `write_work_docs`、`read_work_docs`、`delete_work_docs`、`list_work_docs`、`analysis_work_docs` |
-| 上下文 | `read_contexts`、`write_contexts`、`delete_contexts`、`context_lists`、`search_contexts`、`analysis_contexts` |
-| 任务 | `task_lists`、`task_writers`、`task_deletes` |
-| 智能体 | `write_agent`、`list_agents`、`call_agent` |
+- 使用从配置上下文目录加载的内置智能体。
+- 通过界面创建和编辑自定义智能体。
+- 为每个智能体配置：
+  - 名称、标题、描述、关键词、图标和状态
+  - 指定模型或自动模型模式
+  - 角色、规则、工作流、技能和记忆文件
+  - 自动加载的上下文文件类型
+  - 可用工具
+  - 关联技能
+- 管理可复用技能，包括标签、描述、关键词、等级、内容、状态和排序。
+- 智能体记忆按智能体持久保存，可由智能体工具或上下文整理流程更新。
 
-**MCP 工具** — 通过 Model Context Protocol（stdio JSON-RPC）扩展外部工具能力。
+### 工具能力
 
-### 任务管理
+AgentFlow 按能力类别提供内置工具，不再使用固定工具数量描述：
 
-- 分阶段任务拆解，支持依赖关系追踪
-- 状态流转：待处理 → 进行中 → 完成/失败/跳过
-- 任务文档关联工作区 `tasks/` 目录
-- 自动检测阶段完成进度
+| 类别 | 能力 |
+| --- | --- |
+| 文件操作 | 读取、写入、删除、列出、搜索、分析和诊断项目文件 |
+| 命令执行 | 在项目工作目录中执行 Shell 命令，支持超时和危险命令拦截 |
+| 浏览器自动化 | 打开页面、点击、输入、滚动、执行 JavaScript、清理缓存和截图 |
+| 记忆 | 追加、修改或删除智能体记忆 |
+| 工作区文档 | 写入、读取、删除、列出和分析工作区文档 |
+| 上下文文件 | 读取、写入、删除、列出、搜索和分析上下文文件 |
+| 任务 | 列出、创建/更新/拆分和删除工作区任务 |
+| 智能体 | 创建/更新智能体、列出智能体、调用其他智能体作为子智能体 |
+| 网络搜索 | 使用可配置搜索引擎和自动降级进行搜索 |
+| 图片生成 | 使用配置的图片生成模型生成一张或多张图片 |
+| MCP | 使用启用的 MCP 服务器动态注册的工具 |
 
-### 上下文系统
+### MCP 管理
 
-5 层分级上下文组装系统提示词：
+- 从标准 `mcpServers` JSON 导入 MCP 服务器。
+- 将选中的 MCP 服务器配置导出为 `mcpServers` JSON。
+- 配置命令、参数、环境变量、超时、标签、分类和版本。
+- 在界面中启动和停止 MCP 服务器。
+- 查看服务器状态、已发现工具数量和工具名称。
+- 已启用的 MCP 服务器会在应用启动时启动，并自动注册其工具。
 
-1. **System** — 全局规则（`context/system.md`）
-2. **Project** — 项目级上下文（AGENTS.md / CONTEXT.md / README.md）
-3. **Specs** — 工作区规格文档（`workspace/{uuid}/specs/`）
-4. **Role** — 智能体专属提示词（role/rule/workflow/skill/memory）
-5. **Task Summary** — 当前阶段任务概览
+### 系统工具与提示词
 
-### 移动客户端
+- 查看从工具注册表同步的内置系统工具。
+- 在系统工具页面启用或禁用内置工具。
+- 查看和编辑系统提示词模板。
+- 在存在默认内容时，将提示词模板重置为默认内容。
 
-基于 UniApp (Vue 3) 开发的移动客户端，支持 Android 和 H5 平台。
+### 系统配置
 
-- **多服务器管理** — 连接多个 AgentFlow 实例，自由切换
-- **SSE 流式对话** — 实时接收 AI 回复，支持断线自动重连（`last_seq` 续传）
-- **完整对话 UI** — 支持文本、思考过程、工具调用、工具结果、代码块等多种消息类型展示
-- **工作区与任务** — 浏览工作区、管理会话、查看任务进度
-- **跨平台** — 一套代码同时产出 Android APP 和 H5 网页版，可扩展至 iOS
-- **Token 认证** — 通过 API 登录，Token 按服务器本地持久化
+- 在系统配置页面维护站点设置和安全相关设置。
+- 重要配置项包括：
+  - `session_max_age`：浏览器会话有效期
+  - `admin_user` 和 `admin_password`：初始管理员账号
+  - `llm.timeout`、`llm.max_retries`、`llm.stream_idle_timeout`：模型调用设置
+  - `ai.vision_model`、`ai.image_gen_model`、`ai.prompt_enhance_model`：AI 服务路由
+  - `search.engine`、`search.searxng_url`、`search.jina_api_key`：网络搜索设置
+  - 列表分页默认值
 
-## 快速开始
+### 移动端支持
 
-### 环境要求
-
-- Go 1.25 或更高版本
-
-### 源码运行
-
-```bash
-git clone https://github.com/gacjie/agent_flow.git
-cd agent_flow
-go run main.go
-```
-
-浏览器打开 http://localhost:8080，默认账号：`admin` / `admin123`
-
-### 编译二进制
-
-```bash
-go build -o agent_flow .
-./agent_flow
-```
-
-## 配置说明
-
-配置文件：`config/config.yaml`
-
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 8080
-  mode: "release"          # debug 或 release
-
-database:
-  driver: "sqlite"
-  dsn: "data.db"
-
-auth:
-  session_ttl: "24h"
-  admin_username: "admin"
-  admin_password: "admin123"
-
-agent:
-  context_root: "context"
-  max_iterations: 50
-
-llm:
-  api_timeout: 120
-  max_retries: 2
-```
-
-### 环境变量覆盖
-
-所有配置项均可通过 `AF_` 前缀的环境变量覆盖：
-
-```bash
-AF_SERVER_PORT=9090 AF_AUTH_ADMIN_PASSWORD=secure123 ./agent_flow
-```
-
-## 部署
-
-### 最简部署
-
-1. 将编译好的二进制文件复制到服务器
-2. 将 `config/config.yaml` 放到同一目录
-3. 运行二进制文件
-
-```bash
-./agent_flow_linux_amd64
-```
-
-数据库文件（`data.db`）和工作区目录会在首次运行时自动创建。静态资源和模板已嵌入二进制文件。
-
-### Systemd 服务（Linux）
-
-```ini
-[Unit]
-Description=AgentFlow
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/agent_flow
-ExecStart=/opt/agent_flow/agent_flow_linux_amd64
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### LLM 模型配置
-
-首次登录后，进入 **系统管理 → LLM 模型** 添加你的 LLM 提供商：
-
-- **OpenAI 兼容** — 任何遵循 OpenAI Chat Completions 格式的 API
-- **Anthropic** — Claude 模型，支持 Prompt Caching
-- **Gemini** — Google Gemini 模型
-- **OpenAI Responses** — OpenAI Responses API 格式
-
-### 移动客户端编译
-
-`app/` 目录为移动客户端源码，使用 [HBuilderX](https://www.dcloud.io/hbuilderx.html) 打开并编译：
-
-1. 用 HBuilderX 打开 `app/` 目录
-2. 服务器地址在 APP 中动态配置（支持运行时添加多个服务器）
-3. 编译目标平台：
-   - **Android** — 通过 HBuilderX 云打包或本地打包
-   - **H5** — `npm run build` 产出 Web 版本
-4. APK 产物输出至 `app/unpackage/release/apk/`
-
-## 截图
-
-### Web 工作台
-
-![Web 工作台](agent_flow_web_demo.png)
-
-### 移动客户端
-
-![移动客户端](agent_flow_app_demo.jpg)
-
-## 许可证
-
-本项目基于 [Apache License 2.0](LICENSE) 开源。
+- 通过 API 使用 Bearer Token 登录。
+- 按服务器分别保存 Token。
+- 管理多个 AgentFlow 服务并在它们之间切换。
+- 浏览工作区、会话和任务。
+- 使用支持断线重连的 SSE 流式对话。
+- 展示文本、思考内容、工具调用、工具结果、附件和代码块。

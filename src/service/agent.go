@@ -8,6 +8,7 @@ import (
 	"agent_flow/src/common"
 	"agent_flow/src/config"
 	"agent_flow/src/model"
+	"agent_flow/src/tool"
 
 	"gorm.io/gorm"
 )
@@ -87,6 +88,7 @@ func (s *AgentService) Create(req *model.AgentCreateReq) (*model.Agent, error) {
 		ModelMode:     req.ModelMode,
 		AutoLoadFiles: req.AutoLoadFiles,
 		AutoLoadTools: req.AutoLoadTools,
+		DocRoles:      req.DocRoles,
 		Icon:          req.Icon,
 		Status:        1,
 	}
@@ -149,6 +151,9 @@ func (s *AgentService) Update(id uint, req *model.AgentUpdateReq) (*model.Agent,
 	}
 	if req.AutoLoadTools != nil {
 		updates["auto_load_tools"] = *req.AutoLoadTools
+	}
+	if req.DocRoles != nil {
+		updates["doc_roles"] = *req.DocRoles
 	}
 	if req.Icon != nil {
 		updates["icon"] = *req.Icon
@@ -270,16 +275,23 @@ func (s *AgentService) FindAgentByName(name string) (uint, string, error) {
 // ========== 工具接口方法（供 AI tool_call 调用） ==========
 
 // WriteAgentFromTool 通过工具写入智能体：name 不存在则创建，已存在则更新
-func (s *AgentService) WriteAgentFromTool(name, title, description, keywords, rolePrompt string, modelID string) (id uint, created bool, err error) {
+func (s *AgentService) WriteAgentFromTool(name string, opts tool.WriteAgentOpts) (id uint, created bool, err error) {
 	existing, _ := s.GetByName(name)
 	if existing == nil {
 		req := &model.AgentCreateReq{
-			Name:        name,
-			Title:       title,
-			Description: description,
-			Keywords:    keywords,
-			RolePrompt:  rolePrompt,
-			ModelID:     modelID,
+			Name:            name,
+			Title:           opts.Title,
+			Description:     opts.Description,
+			Keywords:        opts.Keywords,
+			RolePrompt:      opts.RolePrompt,
+			ModelID:         opts.ModelID,
+			DocRoles:        opts.DocRoles,
+			AutoLoadFiles:   opts.AutoLoadFiles,
+			AutoLoadTools:   opts.AutoLoadTools,
+			RuleContent:     opts.RuleContent,
+			SkillContent:    opts.SkillContent,
+			WorkflowContent: opts.WorkflowContent,
+			MemoryContent:   opts.MemoryContent,
 		}
 		agent, createErr := s.Create(req)
 		if createErr != nil {
@@ -288,15 +300,42 @@ func (s *AgentService) WriteAgentFromTool(name, title, description, keywords, ro
 		return agent.ID, true, nil
 	}
 
-	req := &model.AgentUpdateReq{ModelID: &modelID, RolePrompt: &rolePrompt}
-	if title != "" {
-		req.Title = title
+	req := &model.AgentUpdateReq{}
+	if opts.Title != "" {
+		req.Title = opts.Title
 	}
-	if description != "" {
-		req.Description = description
+	if opts.Description != "" {
+		req.Description = opts.Description
 	}
-	if keywords != "" {
-		req.Keywords = keywords
+	if opts.Keywords != "" {
+		req.Keywords = opts.Keywords
+	}
+	if opts.ModelID != "" {
+		req.ModelID = &opts.ModelID
+	}
+	if opts.DocRoles != "" {
+		req.DocRoles = &opts.DocRoles
+	}
+	if opts.AutoLoadFiles != "" {
+		req.AutoLoadFiles = &opts.AutoLoadFiles
+	}
+	if opts.AutoLoadTools != "" {
+		req.AutoLoadTools = &opts.AutoLoadTools
+	}
+	if opts.RolePrompt != "" {
+		req.RolePrompt = &opts.RolePrompt
+	}
+	if opts.RuleContent != "" {
+		req.RuleContent = &opts.RuleContent
+	}
+	if opts.SkillContent != "" {
+		req.SkillContent = &opts.SkillContent
+	}
+	if opts.WorkflowContent != "" {
+		req.WorkflowContent = &opts.WorkflowContent
+	}
+	if opts.MemoryContent != "" {
+		req.MemoryContent = &opts.MemoryContent
 	}
 	_, updateErr := s.Update(existing.ID, req)
 	if updateErr != nil {

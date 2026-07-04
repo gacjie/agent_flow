@@ -31,7 +31,7 @@ func (c *WorkbenchCtrl) Page(w http.ResponseWriter, r *http.Request) {
 	workspaces, _ := c.WorkspaceService.ListActive()
 	agents, _ := c.AgentService.ListAll()
 	projects, _ := c.ProjectService.ListAll()
-	models, _ := c.ModelService.ListAll()
+	models, _ := c.ModelService.ListDistinct()
 
 	data := map[string]interface{}{
 		"Title":      "工作台",

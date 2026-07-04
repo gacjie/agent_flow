@@ -176,6 +176,12 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 	// 4.1 处理历史消息中的附件（将图片文件加载为 ContentParts）
 	messages = r.loadAttachmentsIntoMessages(messages, cfg.ConversationID, sessionSvc, cfg.WorkDir, cfg.ProjectPath)
 
+	// 4.2 创建图片解析缓存（从工作区目录加载历史缓存，同一 Run 内复用 + 跨 Run 持久化）
+	var visionCache *VisionCache
+	if cfg.WorkDir != "" {
+		visionCache = NewVisionCache(filepath.Join(cfg.WorkDir, "vision_cache.json"))
+	}
+
 	// 5. 构建系统提示词（通过 ContextBuilder 分级加载）
 	systemPrompt := cfg.SystemPrompt
 	var promptBuilder *agentctx.Builder // 非 nil 时表示由 Builder 生成，循环中每轮重建
@@ -192,6 +198,7 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 			WorkDir:       cfg.WorkDir,
 			AgentName:     agent.Name,
 			AutoLoadFiles: ParseAutoLoadTools(agent.AutoLoadFiles),
+			AgentDocRoles: splitDocRoles(agent.DocRoles),
 		}
 		promptParams.SkillDocs = r.skillContextBlocks(agent.ID)
 
@@ -351,7 +358,10 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 
 		// 视觉处理：在发送给 LLM 前处理消息中的图片（三级降级）
 		if r.VisionService != nil {
-			sendMessages = r.VisionService.ResolveImages(ctx, sendMessages, currentModel)
+			sendMessages = r.VisionService.ResolveImages(ctx, sendMessages, currentModel, visionCache)
+			if visionCache != nil {
+				visionCache.Save()
+			}
 		}
 
 		chunkCh, err := llmClient.ChatStream(ctx, sendMessages, opts)
@@ -1510,6 +1520,7 @@ func (r *ChatRunner) loadAttachmentsIntoMessages(messages []provider.Message, co
 					Type:      "image",
 					MediaType: att.MediaType,
 					Data:      base64.StdEncoding.EncodeToString(data),
+					Path:      att.Path,
 				})
 			} else if strings.HasPrefix(att.MediaType, "text/") {
 				data, err := os.ReadFile(fullPath)
@@ -1545,4 +1556,20 @@ func (r *ChatRunner) loadAttachmentsIntoMessages(messages []provider.Message, co
 		result = append(result, messages[len(rawMsgs):]...)
 	}
 	return result
+}
+
+// splitDocRoles 将逗号分隔的角色标签拆分为切片
+func splitDocRoles(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	var roles []string
+	for _, r := range strings.Split(s, ",") {
+		r = strings.TrimSpace(r)
+		if r != "" {
+			roles = append(roles, r)
+		}
+	}
+	return roles
 }

@@ -2,12 +2,74 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"agent_flow/src/model"
 	"agent_flow/src/provider"
 )
+
+// VisionCache 图片解析结果缓存（内存 + 持久化到 JSON 文件）
+type VisionCache struct {
+	Items map[string]string `json:"items"`
+	path  string
+	dirty bool
+}
+
+// NewVisionCache 创建缓存，若文件存在则加载历史数据
+func NewVisionCache(filePath string) *VisionCache {
+	c := &VisionCache{
+		Items: make(map[string]string),
+		path:  filePath,
+	}
+	if filePath != "" {
+		if data, err := os.ReadFile(filePath); err == nil {
+			_ = json.Unmarshal(data, c)
+			if c.Items == nil {
+				c.Items = make(map[string]string)
+			}
+		}
+	}
+	return c
+}
+
+func (c *VisionCache) Get(key string) (string, bool) {
+	if c == nil || key == "" {
+		return "", false
+	}
+	v, ok := c.Items[key]
+	return v, ok
+}
+
+func (c *VisionCache) Set(key, value string) {
+	if c == nil || key == "" {
+		return
+	}
+	c.Items[key] = value
+	c.dirty = true
+}
+
+// Save 将缓存写入 JSON 文件（仅在有新增时写入）
+func (c *VisionCache) Save() error {
+	if c == nil || !c.dirty || c.path == "" {
+		return nil
+	}
+	data, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	c.dirty = false
+	return os.WriteFile(c.path, data, 0644)
+}
+
+func sha256Hex(data string) string {
+	h := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(h[:])
+}
 
 // VisionService 视觉代理服务（图片解析三级降级）
 type VisionService struct {
@@ -67,7 +129,7 @@ func (s *VisionService) DescribeImage(ctx context.Context, mediaType, base64Data
 // 1. 模型支持视觉 → 保留图片 ContentParts 不变
 // 2. 模型不支持视觉 + 已配置第三方 → 调用第三方解析为文本
 // 3. 模型不支持视觉 + 未配置第三方 → 替换为提示文本
-func (s *VisionService) ResolveImages(ctx context.Context, messages []provider.Message, m *model.LLMModel) []provider.Message {
+func (s *VisionService) ResolveImages(ctx context.Context, messages []provider.Message, m *model.LLMModel, cache *VisionCache) []provider.Message {
 	if m.HasCapability("vision") {
 		return messages
 	}
@@ -90,6 +152,16 @@ func (s *VisionService) ResolveImages(ctx context.Context, messages []provider.M
 			}
 
 			if hasVisionModel {
+				// 缓存 key：优先用文件路径，无路径时用数据 hash
+				cacheKey := part.Path
+				if cacheKey == "" {
+					cacheKey = sha256Hex(part.Data)
+				}
+				if cached, ok := cache.Get(cacheKey); ok {
+					newParts = append(newParts, provider.ContentPart{Type: "text", Text: cached})
+					continue
+				}
+
 				desc, err := s.DescribeImage(ctx, part.MediaType, part.Data)
 				if err != nil {
 					slog.Warn("视觉模型解析图片失败", "error", err)
@@ -98,9 +170,11 @@ func (s *VisionService) ResolveImages(ctx context.Context, messages []provider.M
 						Text: fmt.Sprintf("[图片解析失败: %s]", err.Error()),
 					})
 				} else {
+					text := fmt.Sprintf("[图片描述: %s]", desc)
+					cache.Set(cacheKey, text)
 					newParts = append(newParts, provider.ContentPart{
 						Type: "text",
-						Text: fmt.Sprintf("[图片描述: %s]", desc),
+						Text: text,
 					})
 				}
 			} else {

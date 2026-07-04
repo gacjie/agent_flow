@@ -43,11 +43,13 @@ func NewToolService(db *gorm.DB, registry *tool.Registry) *ToolService {
 	}
 }
 
-// SyncBuiltins 将 Registry 中所有工具 Upsert 到 system_tools 表
+// SyncBuiltins 将 Registry 中所有工具 Upsert 到 system_tools 表，并清理已不存在的旧工具
 // 必须在 router.New() 之后调用（确保管理工具已注册到 Registry）
 func (s *ToolService) SyncBuiltins(registry *tool.Registry) error {
 	tools := registry.List()
+	names := make([]string, 0, len(tools))
 	for i, t := range tools {
+		names = append(names, t.Name())
 		record := model.SystemTool{
 			Name:        t.Name(),
 			Label:       t.Name(),
@@ -63,6 +65,13 @@ func (s *ToolService) SyncBuiltins(registry *tool.Registry) error {
 			continue
 		}
 	}
+
+	if result := s.DB.Where("category = ? AND name NOT IN ?", "内置", names).Delete(&model.SystemTool{}); result.Error != nil {
+		slog.Error("清理旧系统工具失败", "error", result.Error)
+	} else if result.RowsAffected > 0 {
+		slog.Info("已清理旧系统工具", "count", result.RowsAffected)
+	}
+
 	s.refreshCache()
 	slog.Info("系统工具同步完成", "count", len(tools))
 	return nil

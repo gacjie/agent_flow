@@ -40,6 +40,7 @@ type agentConfig struct {
 	Status        int      `yaml:"status"`
 	AutoLoadFiles []string `yaml:"auto_load_files"`
 	AutoLoadTools []string `yaml:"auto_load_tools"`
+	DocRoles      string   `yaml:"doc_roles,omitempty"`
 	Skills        []string `yaml:"skills,omitempty"`
 }
 
@@ -66,6 +67,7 @@ func (s *FileSyncService) SyncAgent(agent *model.Agent) {
 		Status:        agent.Status,
 		AutoLoadFiles: parseJSONStringArray(agent.AutoLoadFiles),
 		AutoLoadTools: parseJSONStringArray(agent.AutoLoadTools),
+		DocRoles:      agent.DocRoles,
 		Skills:        s.getAgentSkillNames(agent.ID),
 	}
 	writeYAML(filepath.Join(dir, "agent.yaml"), cfg)
