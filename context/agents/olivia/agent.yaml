@@ -26,3 +26,6 @@ auto_load_tools:
   - task_lists
   - analysis_files
   - diagnose_files
+skills:
+  - backend-security
+  - frontend-security

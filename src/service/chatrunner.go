@@ -33,7 +33,8 @@ type ChatRunner struct {
 	ContextMatcher *ContextMatcher
 	ToolRegistry   *tool.Registry
 	PromptService  *PromptService
-	RunnerMgr      *RunnerManager // 后台运行管理器（可为 nil）
+	RunnerMgr      *RunnerManager  // 后台运行管理器（可为 nil）
+	WorkflowEngine *WorkflowEngine // 工作流引擎（可为 nil）
 }
 
 // NewChatRunner 创建 ChatRunner
@@ -56,6 +57,7 @@ type StreamEvent struct {
 type RunConfig struct {
 	ConversationID uint
 	AgentID        uint
+	ModelOverride  string             // 用户在前端选择的模型覆盖（空=使用 Agent 默认模型）
 	WorkspaceID    uint               // 工作区 DB 主键（供任务工具使用）
 	WorkspaceUUID  string             // 工作区 UUID，用于获取 working DB
 	WorkDir        string             // 工作目录（工作文档直接存放于此）
@@ -101,13 +103,15 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 	}()
 
 	// 0. 先保存用户消息到数据库（确保即使后续步骤失败，用户消息也不丢失）
-	var attachmentsJSON string
-	if len(cfg.Attachments) > 0 {
-		if data, err := json.Marshal(cfg.Attachments); err == nil {
-			attachmentsJSON = string(data)
+	if cfg.UserMessage != "" {
+		var attachmentsJSON string
+		if len(cfg.Attachments) > 0 {
+			if data, err := json.Marshal(cfg.Attachments); err == nil {
+				attachmentsJSON = string(data)
+			}
 		}
+		sessionSvc.SaveMessageWithAttachments(cfg.ConversationID, "user", cfg.UserMessage, nil, "", "", 0, "", attachmentsJSON)
 	}
-	sessionSvc.SaveMessageWithAttachments(cfg.ConversationID, "user", cfg.UserMessage, nil, "", "", 0, "", attachmentsJSON)
 
 	// 错误辅助：同时推送前端并保存到数据库（确保刷新后错误信息不丢失）
 	sendError := func(msg string) {
@@ -121,6 +125,16 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 	if err != nil {
 		sendError(err.Error())
 		return
+	}
+
+	// 用户在前端指定了模型覆盖时，重新解析模型客户端列表
+	if cfg.ModelOverride != "" {
+		if overrideClients, err := r.resolveModelClients(cfg.ModelOverride); err != nil {
+			sendError(err.Error())
+			return
+		} else {
+			modelClients = overrideClients
+		}
 	}
 	agentTitle = agent.DisplayName()
 
@@ -137,6 +151,27 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 	eventCh <- StreamEvent{Type: "agent_info", Data: map[string]interface{}{"agent_name": agent.DisplayName()}}
 
 	allTools := r.getToolsForAgent(agent)
+
+	// 工作流引擎：预加载定义，若该智能体存在工作流则确保 work_flow 工具始终可用
+	// （避免 AutoLoadTools 未包含 work_flow 时 LLM 无法推进步骤造成死锁）
+	var wfDef *WorkflowDef
+	if r.WorkflowEngine != nil && cfg.WorkspaceUUID != "" && agent.Name != "" {
+		if def := r.WorkflowEngine.LoadDefinition(agent.Name); def != nil && len(def.Steps) > 0 {
+			wfDef = def
+			hasWorkFlowTool := false
+			for _, t := range allTools {
+				if t.Name() == "work_flow" {
+					hasWorkFlowTool = true
+					break
+				}
+			}
+			if !hasWorkFlowTool {
+				if wt, ok := r.ToolRegistry.Get("work_flow"); ok {
+					allTools = append(allTools, wt)
+				}
+			}
+		}
+	}
 
 	// 2. 准备工具上下文（ProjectPath 优先作为工具工作目录，WorkspaceDir 始终指向工作区目录）
 	// CRUD 工具工作目录：有项目则用项目路径，无项目则用工作区下的 project/ 子目录
@@ -266,6 +301,18 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 	const failThreshold = 5              // 连续失败 N 次触发自检
 	tokenTracker := tokenutil.NewTracker()
 
+	// 工作流引擎初始化：wfDef 已在工具准备阶段预加载，此处获取/创建会话工作流状态
+	var wfState *model.WorkflowState
+	if r.WorkflowEngine != nil && wfDef != nil && len(wfDef.Steps) > 0 && cfg.WorkspaceUUID != "" {
+		if wdb, err := r.WorkflowEngine.WorkingDBMgr.GetDB(cfg.WorkspaceUUID); err == nil {
+			wfState = r.WorkflowEngine.GetOrCreateState(wdb, cfg.ConversationID, agent.Name, wfDef)
+			// 轮次循环：工作流已完成时自动开启新一轮
+			if wfState != nil && wfState.Status == 2 {
+				r.WorkflowEngine.StartNewRound(wdb, wfState, wfDef)
+			}
+		}
+	}
+
 	for totalLoops := 0; ; totalLoops++ {
 		// 检查 context 是否已取消（用户停止会话）
 		select {
@@ -288,6 +335,25 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 				Role:    "user",
 				Content: fmt.Sprintf("<相关文件>\n%s\n</相关文件>", relevantFilesCtx),
 			})
+		}
+
+		// 工作流步骤注入：活跃态注入当前步骤指引，空闲态注入概览
+		if wfState != nil && wfDef != nil {
+			if wfState.Status == 1 {
+				if stepCtx := r.WorkflowEngine.BuildStepContext(wfState, wfDef); stepCtx != "" {
+					sendMessages = append(sendMessages, provider.Message{
+						Role:    "user",
+						Content: stepCtx,
+					})
+				}
+			} else if wfState.Status == 0 {
+				if overviewCtx := r.WorkflowEngine.BuildOverviewContext(wfState, wfDef); overviewCtx != "" {
+					sendMessages = append(sendMessages, provider.Message{
+						Role:    "user",
+						Content: overviewCtx,
+					})
+				}
+			}
 		}
 
 		// 预检查：在 LLM 调用前检查 token 是否接近上限，超阈值则先整理
@@ -348,10 +414,15 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 		}
 
 		// 调用 LLM（流式）
+		// 模型不支持工具时不发送工具定义，避免 API 400 错误
+		activeTools := toolDefs
+		if !currentModel.HasCapability("tools") {
+			activeTools = nil
+		}
 		opts := provider.ChatOptions{
 			Model:           currentModel.APIModelID,
 			MaxTokens:       currentModel.MaxOutputTokens,
-			Tools:           toolDefs,
+			Tools:           activeTools,
 			Stream:          true,
 			ReasoningEffort: currentModel.ReasoningEffort,
 		}
@@ -437,6 +508,10 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 			if !modelTrusted {
 				effectiveMax = 0
 			}
+			isTransient := provider.IsTransientServerError(err) || provider.IsHTTP2StreamError(err)
+			if isTransient && effectiveMax < 1 {
+				effectiveMax = 1
+			}
 			if retryCount < effectiveMax {
 				retryCount++
 				// 超时错误：翻倍超时时间给模型更多时间
@@ -445,8 +520,8 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 						adj.DoubleStreamIdleTimeout()
 					}
 				}
-				// 502/503 短延迟
-				if provider.IsTransientServerError(err) {
+				// 瞬态服务端错误或 HTTP/2 流错误：短延迟后重试
+				if isTransient {
 					slog.Warn("LLM 瞬态错误，等待后重试",
 						"model", currentModel.ModelID,
 						"retry", retryCount, "max", effectiveMax,
@@ -586,6 +661,10 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 				if !modelTrusted {
 					effectiveMax = 0
 				}
+				isTransient := provider.IsTransientServerError(chunk.Error) || provider.IsHTTP2StreamError(chunk.Error)
+				if isTransient && effectiveMax < 1 {
+					effectiveMax = 1
+				}
 				if retryCount < effectiveMax {
 					retryCount++
 					// 超时错误：翻倍超时时间
@@ -594,8 +673,8 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 							adj.DoubleStreamIdleTimeout()
 						}
 					}
-					// 502/503 短延迟
-					if provider.IsTransientServerError(chunk.Error) {
+					// 瞬态服务端错误或 HTTP/2 流错误：短延迟后重试
+					if isTransient {
 						slog.Warn("流式响应瞬态错误，等待后重试",
 							"model", currentModel.ModelID,
 							"retry", retryCount, "max", effectiveMax,
@@ -751,6 +830,25 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 
 		// 检查是否需要执行工具
 		if finishReason != "tool_calls" && len(fullToolCalls) == 0 {
+			// 工作流纠正拦截：工作流未完成时阻止 LLM 直接结束
+			if r.WorkflowEngine != nil && wfState != nil && wfDef != nil && wfState.Status == 1 {
+				wfState.Corrections++
+				if wfState.Corrections <= 3 {
+					corrMsg := r.WorkflowEngine.BuildCorrectionMessage(wfState, wfDef)
+					messages = append(messages, provider.Message{Role: "user", Content: corrMsg})
+					sessionSvc.SaveMessage(cfg.ConversationID, "user", corrMsg, nil, "", "", 0, "")
+					r.WorkflowEngine.SaveStateByUUID(cfg.WorkspaceUUID, wfState)
+					slog.Info("工作流纠正拦截", "conversation_id", cfg.ConversationID,
+						"step", wfState.CurrentStepNum, "corrections", wfState.Corrections)
+					continue // 回到循环顶部，让 LLM 继续
+				}
+				// 纠正超 3 次，强制推进避免死循环
+				r.WorkflowEngine.ForceAdvanceByUUID(cfg.WorkspaceUUID, wfState)
+				slog.Warn("工作流纠正超限，强制推进", "conversation_id", cfg.ConversationID, "step", wfState.CurrentStepNum)
+				if wfState.Status == 1 {
+					continue
+				}
+			}
 			// 最终回答，本轮对话结束
 			doneData := map[string]interface{}{"total_tokens": totalTokens, "source": "api"}
 			if totalTokens == 0 {
@@ -900,6 +998,70 @@ func (r *ChatRunner) Run(ctx context.Context, cfg RunConfig, eventCh chan<- Stre
 			messages = append(messages, toolVisionMsgs...)
 			// 批量保存工具结果到数据库（单事务）
 			sessionSvc.SaveMessages(toolMsgs)
+
+			// --- 工作流状态同步 ---
+			// work_flow 工具在执行时直接修改了 DB 中的 WorkflowState，此处重新加载到内存
+			if r.WorkflowEngine != nil && wfState != nil && wfDef != nil {
+				if reloaded := r.WorkflowEngine.GetState(cfg.WorkspaceUUID, cfg.ConversationID); reloaded != nil {
+					wfState = reloaded
+					// 检测截断请求：由 work_flow(truncate=true) 触发
+					if wfState.TruncateRequested && r.TidyUpService != nil {
+						conv, _ := sessionSvc.GetConversation(cfg.ConversationID)
+						if conv != nil && conv.WorkspaceID > 0 {
+							eventCh <- StreamEvent{Type: "content", Content: "\n\n---\n工作流步骤完成，正在整理上下文...\n"}
+
+							var tidyOpts *TidyUpOptions
+							if cfg.IsSubConv {
+								tidyOpts = &TidyUpOptions{
+									IsSubConv:       true,
+									ParentConvID:    cfg.ParentConvID,
+									AgentName:       cfg.AgentName,
+									SkipTaskUpdates: true,
+								}
+							}
+
+							result, err := r.TidyUpService.TidyUpAndRelay(ctx, sessionSvc, cfg.ConversationID, cfg.AgentID,
+								conv.WorkspaceID, cfg.WorkspaceUUID, systemPrompt, "工作流步骤截断", tidyOpts)
+							if err == nil && result != nil {
+								eventCh <- StreamEvent{Type: "conv_switch", Data: map[string]interface{}{
+									"old_conv_id": cfg.ConversationID,
+									"new_conv_id": result.NewConvID,
+									"reason":      "workflow_truncate",
+								}}
+								eventCh <- StreamEvent{Type: "content", Content: "上下文整理完成，已切换到新会话。\n---\n\n"}
+
+								// 继承工作流状态到新会话，清除截断标志
+								if newState := r.WorkflowEngine.CarryOverState(cfg.WorkspaceUUID, wfState, result.NewConvID); newState != nil {
+									wfState = newState
+								}
+
+								cfg.ConversationID = result.NewConvID
+								sessionSvc = r.ChatService.ForWorkspace(cfg.WorkspaceUUID)
+								if r.RunnerMgr != nil {
+									r.RunnerMgr.SwitchConversation(
+										SessionKey(cfg.WorkspaceUUID, result.OldConvID),
+										SessionKey(cfg.WorkspaceUUID, result.NewConvID),
+									)
+								}
+								reloadedMsgs, err := sessionSvc.GetMessagesAsLLM(cfg.ConversationID)
+								if err == nil && len(reloadedMsgs) > 0 {
+									messages = r.loadAttachmentsIntoMessages(reloadedMsgs, cfg.ConversationID, sessionSvc, cfg.WorkDir, cfg.ProjectPath)
+									if systemPrompt != "" {
+										messages = append([]provider.Message{{Role: "system", Content: systemPrompt}}, messages...)
+									}
+								}
+								tokenTracker.Reset()
+								continue
+							} else if err != nil {
+								slog.Warn("工作流截断整理失败，清除截断标志继续", "error", err)
+								// 整理失败也要清除标志，避免死循环
+								wfState.TruncateRequested = false
+								r.WorkflowEngine.SaveStateByUUID(cfg.WorkspaceUUID, wfState)
+							}
+						}
+					}
+				}
+			}
 
 			// --- 死循环自检逻辑 ---
 			needCheck := false
@@ -1072,6 +1234,12 @@ func (r *ChatRunner) InvokeSubAgent(ctx context.Context, workspaceUUID string, _
 		return "", fmt.Errorf("创建子会话失败: %w", err)
 	}
 
+	// 关联 tool_call_id（供手动恢复后更新工具结果）
+	if toolCallID := tool.GetToolCallID(ctx); toolCallID != "" {
+		subConv.ToolCallID = toolCallID
+		sessionSvc.DB.Model(subConv).Update("tool_call_id", toolCallID)
+	}
+
 	// 通知父会话：子会话已开始
 	if r.RunnerMgr != nil {
 		r.RunnerMgr.Publish(SessionKey(workspaceUUID, parentConvID), StreamEvent{
@@ -1120,6 +1288,21 @@ func (r *ChatRunner) InvokeSubAgent(ctx context.Context, workspaceUUID string, _
 		return "", err
 	}
 
+	// context 取消（用户停止会话）→ 标记子会话为"已取消"，跳过无意义的 LLM 总结
+	if ctx.Err() != nil {
+		sessionSvc.CancelConversation(subConv.ID)
+		if r.RunnerMgr != nil {
+			r.RunnerMgr.Publish(SessionKey(workspaceUUID, parentConvID), StreamEvent{
+				Type: "sub_conv_error",
+				Data: map[string]interface{}{
+					"conv_id": subConv.ID,
+					"error":   "用户停止",
+				},
+			})
+		}
+		return "", ctx.Err()
+	}
+
 	// 始终执行结构化总结（确保任务更新和记忆更新副作用不遗漏）
 	structuredSummary := r.generateConvSummary(ctx, subCfg, sessionSvc, syncResult.FinalConvID)
 
@@ -1143,6 +1326,12 @@ func (r *ChatRunner) InvokeSubAgent(ctx context.Context, workspaceUUID string, _
 	}
 
 	return summary, nil
+}
+
+// SummarizeConversation 生成会话总结（公开方法，供控制器在子会话手动继续后调用）
+func (r *ChatRunner) SummarizeConversation(cfg RunConfig, workspaceUUID string, convID uint) string {
+	sessionSvc := r.ChatService.ForWorkspace(workspaceUUID)
+	return r.generateConvSummary(context.Background(), cfg, sessionSvc, convID)
 }
 
 // mergeToolCalls 合并流式中分片到达的 tool calls

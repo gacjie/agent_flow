@@ -90,8 +90,12 @@
         <div class="tab-pane" data-tab-content="workflow">
             <div class="form-control">
                 <label class="form-label">工作流程（workflow.md）</label>
+                <div class="alert alert-info text-sm" style="margin-bottom:.75rem;">
+                    <p style="margin:0 0 .4rem 0;"><strong>工作流引擎格式</strong>：按 <code>## [STEP 序号/总数] 步骤标题</code> 定义各步骤，系统会解析为可强制执行的工作流。不含 <code>[STEP</code> 标记的内容不会启用工作流引擎，也不会注入到 system prompt。</p>
+                    <p style="margin:.4rem 0 0 0;">每个步骤建议包含 <strong>完成条件</strong> 和 <strong>结束动作</strong>（说明何时调用 <code>work_flow</code> 工具、传什么参数）。智能体完成一个步骤时调用 <code>work_flow(step="下一步编号", summary="...", context_for_next="...")</code> 推进；检查步骤发现问题可回退，如 <code>work_flow(step="3")</code>；全部完成传 <code>work_flow(step="done")</code>；需要截断上下文时加 <code>truncate=true</code>。</p>
+                </div>
                 <textarea name="workflow_content" class="input" rows="20"
-                          placeholder="定义此智能体的工作流程步骤（编排智能体在此描述多阶段流程和 call_agent 调用）...">{{index .Content "workflow"}}</textarea>
+                          placeholder="## [STEP 1/5] 需求分析&#10;&#10;分析用户需求，产出需求文档...&#10;&#10;**完成条件**: 需求文档已生成且含验收标准。&#10;**结束动作**: 调用 work_flow(step=&quot;2&quot;) 进入规划阶段。&#10;&#10;## [STEP 2/5] 设计规划&#10;&#10;...">{{index .Content "workflow"}}</textarea>
             </div>
         </div>
 
@@ -186,12 +190,8 @@
                             {{if index .AutoLoadFilesMap "skill"}}checked{{end}}>
                         <span>角色速查 (skill.md)</span>
                     </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="auto_load_files" value="workflow"
-                            {{if index .AutoLoadFilesMap "workflow"}}checked{{end}}>
-                        <span>工作流程 (workflow.md)</span>
-                    </label>
                 </div>
+                <p class="text-sm opacity-60 mt-2">注：工作流程（workflow.md）不再通过此处加载。含 <code>[STEP</code> 标记时由工作流引擎解析并按步骤动态注入，无需勾选。</p>
             </div>
 
             <div class="form-control">

@@ -79,8 +79,8 @@ func (m *WorkingDBManager) GetDB(workspaceUUID string) (*gorm.DB, error) {
 	// SQLite 性能优化
 	database.OptimizeSQLite(newDB)
 
-	// 自动迁移 Conversation、ChatMessage、Task 表
-	if err := newDB.AutoMigrate(&model.Conversation{}, &model.ChatMessage{}, &model.Task{}); err != nil {
+	// 自动迁移 Conversation、ChatMessage、Task、WorkflowState 表
+	if err := newDB.AutoMigrate(&model.Conversation{}, &model.ChatMessage{}, &model.Task{}, &model.WorkflowState{}); err != nil {
 		return nil, fmt.Errorf("working.db 迁移失败: %w", err)
 	}
 

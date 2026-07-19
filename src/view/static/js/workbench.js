@@ -1830,6 +1830,14 @@
                 }
             }
         }
+        // 子会话正常完成后，通知用户并自动跳转回主会话
+        if (cleanlyDone && WB_CONFIG.convType === 'sub' && WB_CONFIG.convParentId > 0) {
+            appendStatusNotice('子会话已完成，正在返回主会话...');
+            setTimeout(function() {
+                window.location.href = '/admin/workbench?workspace_id=' +
+                    WB_CONFIG.workspaceId + '&conv_id=' + WB_CONFIG.convParentId;
+            }, 3000);
+        }
         if (taskPanelVisible) loadTasks();
         loadConversations();
     }
@@ -1994,6 +2002,7 @@
         lastSeq = 0;
         var body = { message: msg, workspace_id: WB_CONFIG.workspaceId || 0, last_seq: 0 };
         if (wbSelAgent && wbSelAgent.value) body.agent_id = parseInt(wbSelAgent.value, 10);
+        if (wbSelModel && wbSelModel.value) body.model_id = wbSelModel.value;
         if (sendAttachments) {
             body.attachments = sendAttachments;
             pendingAttachments = [];

@@ -25,4 +25,7 @@ auto_load_tools:
   - task_writers
   - task_deletes
   - analysis_contexts
-doc_roles: "backend,frontend,database,security,api"
+doc_roles: "backend,frontend,database,api"
+skills:
+  - backend-security
+  - frontend-security

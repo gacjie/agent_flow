@@ -59,6 +59,8 @@ func (c *WorkbenchCtrl) Page(w http.ResponseWriter, r *http.Request) {
 						uint(convID), uint(workspaceID)).First(&conv).Error; err == nil {
 						data["ActiveConvID"] = conv.ID
 						data["ConvAgentID"] = conv.AgentID
+						data["ConvType"] = conv.ConvType
+						data["ConvParentID"] = conv.ParentID
 						// 检查是否有运行中的任务
 						if c.RunnerManager != nil && c.RunnerManager.IsRunning(sk) {
 							data["IsRunning"] = true

@@ -10,6 +10,7 @@ type Conversation struct {
 	AgentID     uint       `gorm:"default:0;index" json:"agent_id"` // 允许为0（团队模式主会话）
 	AgentName   string     `gorm:"size:100" json:"agent_name"`      // 冗余存储，避免跨DB查询
 	ParentID    uint       `gorm:"default:0;index" json:"parent_id"` // 子会话指向父会话
+	ToolCallID  string     `gorm:"size:100" json:"tool_call_id"`          // 子会话关联的父会话 tool_call ID
 	ConvType    string     `gorm:"size:20;default:main" json:"conv_type"` // main=主会话 sub=子会话
 	Title       string     `gorm:"size:200" json:"title"`
 	Summary     string     `gorm:"type:text" json:"summary"`          // 阶段摘要

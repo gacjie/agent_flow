@@ -41,8 +41,11 @@ func NewOpenAIClient(cfg ProviderConfig) *OpenAIClient {
 		streamIdleTimeout: streamIdle,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
+				ForceAttemptHTTP2:     true,
 				TLSHandshakeTimeout:   15 * time.Second,
 				ResponseHeaderTimeout: baseDur,
+				MaxIdleConnsPerHost:   2,
+				IdleConnTimeout:       120 * time.Second,
 			},
 		},
 	}
@@ -270,11 +273,19 @@ func (c *OpenAIClient) buildRequest(messages []Message, opts ChatOptions) ([]byt
 	}
 
 	// 转换消息
+	hasTools := len(opts.Tools) > 0
 	for _, m := range messages {
+		// 模型不支持工具时，跳过 tool 角色消息
+		if !hasTools && m.Role == "tool" {
+			continue
+		}
 		om := openaiMessage{
 			Role:             m.Role,
 			ReasoningContent: m.ReasoningContent,
-			ToolCallID:       m.ToolCallID,
+		}
+		// 仅在有工具定义时才保留 tool_call_id
+		if hasTools {
+			om.ToolCallID = m.ToolCallID
 		}
 		// 多模态内容：ContentParts 非空时构建数组格式
 		if len(m.ContentParts) > 0 && (m.Role == "user" || m.Role == "tool") {
@@ -299,19 +310,22 @@ func (c *OpenAIClient) buildRequest(messages []Message, opts ChatOptions) ([]byt
 		} else {
 			om.Content, _ = json.Marshal(m.Content)
 		}
-		for _, tc := range m.ToolCalls {
-			args := tc.Arguments
-			if !json.Valid([]byte(args)) {
-				args = "{}"
+		// 仅在有工具定义时才附加 tool_calls
+		if hasTools {
+			for _, tc := range m.ToolCalls {
+				args := tc.Arguments
+				if !json.Valid([]byte(args)) {
+					args = "{}"
+				}
+				om.ToolCalls = append(om.ToolCalls, openaiToolCall{
+					ID:   tc.ID,
+					Type: "function",
+					Function: openaiToolCallFunc{
+						Name:      tc.Name,
+						Arguments: args,
+					},
+				})
 			}
-			om.ToolCalls = append(om.ToolCalls, openaiToolCall{
-				ID:   tc.ID,
-				Type: "function",
-				Function: openaiToolCallFunc{
-					Name:      tc.Name,
-					Arguments: args,
-				},
-			})
 		}
 		// DeepSeek 思考模式要求所有 assistant 消息都携带 reasoning_content 字段
 		if opts.ReasoningEffort != "" && om.Role == "assistant" && om.ReasoningContent == "" {

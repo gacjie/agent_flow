@@ -280,15 +280,23 @@ func seedData(cfg *config.AppConfig) {
 		{Key: "ai.vision_model", Value: "", Label: "视觉解析模型", Group: "AI 服务", Type: "model_select", Sort: 1},
 		{Key: "ai.image_gen_model", Value: "", Label: "图片生成模型", Group: "AI 服务", Type: "model_select", Sort: 2},
 		{Key: "ai.prompt_enhance_model", Value: "auto", Label: "提示词增强模型", Group: "AI 服务", Type: "model_select", Sort: 3},
-		{Key: "search.engine", Value: "auto", Label: "搜索引擎", Group: "搜索", Type: "select", Options: `[{"value":"auto","label":"自动切换（SearXNG→Jina→DuckDuckGo）"},{"value":"searxng","label":"SearXNG"},{"value":"jina","label":"Jina AI"},{"value":"duckduckgo","label":"DuckDuckGo"}]`, Sort: 1},
-		{Key: "search.searxng_url", Value: "https://search.inetol.net", Label: "SearXNG 实例地址", Group: "搜索", Type: "text", Sort: 2},
-		{Key: "search.jina_api_key", Value: "", Label: "Jina API Key（可选，提高额度）", Group: "搜索", Type: "text", Sort: 3},
+		{Key: "search.engine", Value: "auto", Label: "搜索引擎", Group: "搜索", Type: "search_engine", Sort: 1},
+		{Key: "search.searxng_url", Value: "", Label: "SearXNG 自建实例地址", Group: "搜索", Type: "text", Sort: 2},
+		{Key: "search.jina_api_key", Value: "", Label: "Jina API Key（注册免费得 1000 万 token）", Group: "搜索", Type: "text", Sort: 3},
+		{Key: "search.tavily_api_key", Value: "", Label: "Tavily API Key（可选，无 Key 也可用 keyless 模式）", Group: "搜索", Type: "text", Sort: 4},
+		{Key: "search.exa_api_key", Value: "", Label: "Exa API Key（注册送 $10 额度）", Group: "搜索", Type: "text", Sort: 5},
+		{Key: "search.brave_api_key", Value: "", Label: "Brave Search API Key（每月 2000 次免费）", Group: "搜索", Type: "text", Sort: 6},
+		{Key: "search.serper_api_key", Value: "", Label: "Serper API Key（注册送 2500 次）", Group: "搜索", Type: "text", Sort: 7},
+		{Key: "search.google_api_key", Value: "", Label: "Google API Key", Group: "搜索", Type: "text", Sort: 8},
+		{Key: "search.google_cx", Value: "", Label: "Google Custom Search CX", Group: "搜索", Type: "text", Sort: 9},
 	}
 	for _, c := range configs {
 		db.Where("`key` = ?", c.Key).FirstOrCreate(&c)
 	}
 	// 确保 AI 模型配置字段类型为 model_select（升级兼容）
 	db.Model(&model.SysConfig{}).Where("`key` LIKE ?", "ai.%").Update("type", "model_select")
+	// 确保搜索引擎配置字段类型为 search_engine（升级兼容）
+	db.Model(&model.SysConfig{}).Where("`key` = ?", "search.engine").Updates(map[string]interface{}{"type": "search_engine", "options": ""})
 
 	// --- SecretKey 持久化（config.yaml 未配置时，生成后直接写回配置文件）---
 	if cfg.App.SecretKey == "" {

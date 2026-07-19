@@ -6,6 +6,7 @@ import (
 
 	"agent_flow/src/middleware"
 	"agent_flow/src/service"
+	"agent_flow/src/tool"
 )
 
 // SysConfigCtrl 系统配置控制器
@@ -24,10 +25,11 @@ func (c *SysConfigCtrl) Edit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"Title":      "系统配置",
-		"Configs":    configs,
-		"AdminPage":  true,
-		"ActiveMenu": "config",
+		"Title":         "系统配置",
+		"Configs":       configs,
+		"AdminPage":     true,
+		"ActiveMenu":    "config",
+		"SearchEngines": tool.SearchEngineOptions,
 	}
 
 	if c.ModelService != nil {

@@ -102,6 +102,7 @@ type ctxKey string
 
 const workContextKey ctxKey = "work_context"
 const agentInfoKey ctxKey = "agent_info"
+const toolCallIDKey ctxKey = "tool_call_id"
 
 // WithWorkContext 将 WorkContext 注入到 context 中
 func WithWorkContext(ctx context.Context, wc *WorkContext) context.Context {
@@ -114,6 +115,19 @@ func GetWorkContext(ctx context.Context) *WorkContext {
 		return wc
 	}
 	return nil
+}
+
+// WithToolCallID 将当前工具调用 ID 注入到 context 中
+func WithToolCallID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, toolCallIDKey, id)
+}
+
+// GetToolCallID 从 context 中获取当前工具调用 ID
+func GetToolCallID(ctx context.Context) string {
+	if id, ok := ctx.Value(toolCallIDKey).(string); ok {
+		return id
+	}
+	return ""
 }
 
 // WithAgentInfo 将 AgentInfo 注入到 context 中

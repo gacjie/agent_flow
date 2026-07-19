@@ -28,4 +28,6 @@ auto_load_tools:
   - browser_action
   - analysis_files
   - diagnose_files
-doc_roles: "frontend,api,security"
+doc_roles: "frontend,api"
+skills:
+  - frontend-security

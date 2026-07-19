@@ -1,5 +1,14 @@
 package browsers
 
+var DevicePresets = map[string][2]int{
+	"mobile":        {375, 667},
+	"mobile_large":  {428, 926},
+	"tablet":        {768, 1024},
+	"tablet_large":  {1024, 1366},
+	"desktop":       {1280, 720},
+	"desktop_large": {1920, 1080},
+}
+
 type SelectorState struct {
 	Selector string `json:"selector"`
 	Exists   bool   `json:"exists"`
@@ -138,6 +147,9 @@ type StructuredAction struct {
 	Direction string
 	Amount    int
 	Wait      int
+	Width     int
+	Height    int
+	Device    string
 }
 
 type InteractionRef struct {
@@ -156,6 +168,9 @@ type StepParams struct {
 	Direction string `json:"direction"`
 	Amount    int    `json:"amount"`
 	Wait      int    `json:"wait"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Device    string `json:"device"`
 }
 
 type Params struct {
@@ -170,6 +185,7 @@ type Params struct {
 	Wait             int          `json:"wait"`
 	Width            int          `json:"width"`
 	Height           int          `json:"height"`
+	Device           string       `json:"device"`
 	OutputExpands    []string     `json:"output_expands"`
 	SnapshotSelector string       `json:"snapshot_selector"`
 	WatchSelectors   []string     `json:"watch_selectors"`

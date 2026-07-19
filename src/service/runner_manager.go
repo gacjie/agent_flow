@@ -297,6 +297,15 @@ func (m *RunnerManager) RegisterSession(key string) func() {
 	}
 }
 
+// WaitForCompletion 阻塞等待指定会话的 runner 完成
+// 通过订阅 channel 等待关闭，不消耗 CPU。session 不存在或已完成时立即返回。
+func (m *RunnerManager) WaitForCompletion(key string) {
+	subID := "wait-completion-" + key
+	ch, _ := m.SubscribeWithReplay(key, subID, 0)
+	for range ch {
+	}
+}
+
 // GetCurrentSeq 返回指定会话的当前事件序号（用于前端跳过已有事件）
 func (m *RunnerManager) GetCurrentSeq(key string) int {
 	m.mu.RLock()

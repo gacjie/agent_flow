@@ -30,3 +30,5 @@ auto_load_tools:
   - analysis_files
   - diagnose_files
 doc_roles: "frontend"
+skills:
+  - frontend-security

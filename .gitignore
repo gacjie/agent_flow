@@ -28,6 +28,7 @@ Thumbs.db
 
 # Build
 /build/
+/packages/
 /dist/
 /tmp/
 
@@ -36,3 +37,6 @@ Thumbs.db
 
 # Log
 *.log
+
+# User config (auto-generated from default_config.yaml)
+config/config.yaml

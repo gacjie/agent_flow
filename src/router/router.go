@@ -43,6 +43,9 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 	chatRunner.AgentService = agentService
 	// Phase 6: 任务系统服务（工作区级，操作 working.db）
 	taskService := service.NewTaskService(workingMgr)
+	// 工作流引擎：解析 workflow.md 步骤，管理会话级工作流状态
+	workflowEngine := service.NewWorkflowEngine(workingMgr)
+	chatRunner.WorkflowEngine = workflowEngine
 	// Phase 7: 上下文整理 + 记忆
 	tidyUpService := service.NewTidyUpService(chatService, taskService, modelService)
 	chatRunner.TaskService = taskService
@@ -66,6 +69,8 @@ func New(db *gorm.DB, engine *view.Engine, permService *service.PermissionServic
 	tool.RegisterAgentTools(toolRegistry, agentService, chatRunner)
 	// 注册任务管理工具（供智能体通过 tool_call 操作工作区任务）
 	tool.RegisterTaskTools(toolRegistry, taskService)
+	// 注册工作流控制工具（供智能体按步骤推进/回退工作流）
+	tool.RegisterWorkflowTool(toolRegistry, workflowEngine)
 	// 注册图片生成工具（需要 ModelGetter + ConfigGetter 依赖）
 	toolRegistry.Register(&tool.ImageGenTool{
 		ConfigGetter: configService,

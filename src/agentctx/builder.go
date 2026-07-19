@@ -80,11 +80,10 @@ func shouldLoadFile(autoLoadFiles []string, fileType string) bool {
 
 // fileTypeMap 角色上下文文件名到类型的映射
 var fileTypeMap = map[string]string{
-	"role.md":     "role",
-	"rule.md":     "rule",
-	"skill.md":    "skill",
-	"workflow.md": "workflow",
-	"memory.md":   "memory",
+	"role.md":   "role",
+	"rule.md":   "rule",
+	"skill.md":  "skill",
+	"memory.md": "memory",
 }
 
 // filterRoleBlocks 根据 AutoLoadFiles 配置过滤角色级上下文块

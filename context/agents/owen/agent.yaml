@@ -25,3 +25,6 @@ auto_load_tools:
   - write_contexts
   - delete_contexts
   - analysis_contexts
+skills:
+  - backend-security
+  - frontend-security

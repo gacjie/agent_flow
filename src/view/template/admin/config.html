@@ -48,11 +48,11 @@
                 {{end}}
                 {{end}}
             </select>
-            {{else if eq .Type "select"}}
+            {{else if eq .Type "search_engine"}}
             {{$curVal := .Value}}
             <select name="config_{{.Key}}" class="select">
-                {{range jsonOptions .Options}}
-                <option value="{{index . "value"}}" {{if eq (index . "value") $curVal}}selected{{end}}>{{index . "label"}}</option>
+                {{range $.SearchEngines}}
+                <option value="{{.Value}}" {{if eq .Value $curVal}}selected{{end}}>{{.Label}}</option>
                 {{end}}
             </select>
             {{else}}

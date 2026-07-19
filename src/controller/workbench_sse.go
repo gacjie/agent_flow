@@ -27,6 +27,7 @@ func (c *WorkbenchCtrl) SendMessage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Message     string             `json:"message"`
 		AgentID     uint               `json:"agent_id"`
+		ModelID     string             `json:"model_id"`
 		WorkspaceID uint               `json:"workspace_id"`
 		LastSeq     int                `json:"last_seq"`
 		Attachments []model.Attachment `json:"attachments"`
@@ -55,8 +56,14 @@ func (c *WorkbenchCtrl) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if conv.Status != 1 {
-		http.Error(w, "会话已结束", http.StatusBadRequest)
-		return
+		// 允许已取消的子会话重新继续（用户手动在子会话发消息）
+		if conv.Status == 3 && conv.ConvType == "sub" {
+			sessionSvc.ReopenConversation(conv.ID)
+			conv.Status = 1
+		} else {
+			http.Error(w, "会话已结束", http.StatusBadRequest)
+			return
+		}
 	}
 
 	mgr := c.RunnerManager
@@ -124,6 +131,21 @@ func (c *WorkbenchCtrl) SendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isRunning && req.Message != "" {
+		// 主会话发消息前清理当前主会话关联的残留子会话
+		if conv.ConvType == "main" || conv.ParentID == 0 {
+			var activeSubConvs []model.Conversation
+			sessionSvc.DB.Where("parent_id = ? AND status IN (1, 3)", convID).Find(&activeSubConvs)
+			for _, sub := range activeSubConvs {
+				subKey := service.SessionKey(ws.UUID, sub.ID)
+				if mgr.IsRunning(subKey) {
+					mgr.ForceFinish(subKey)
+				}
+				if sub.Status == 1 {
+					sessionSvc.CancelConversation(sub.ID)
+				}
+			}
+		}
+
 		// 切换智能体时持久化到数据库，确保刷新后下拉框显示正确
 		if agentID > 0 && agentID != conv.AgentID {
 			sessionSvc.UpdateConversationAgent(conv.ID, agentID)
@@ -137,14 +159,23 @@ func (c *WorkbenchCtrl) SendMessage(w http.ResponseWriter, r *http.Request) {
 		runCfg := service.RunConfig{
 			ConversationID: uint(convID),
 			AgentID:        agentID,
+			ModelOverride:  req.ModelID,
 			WorkspaceID:    ws.ID,
 			WorkspaceUUID:  ws.UUID,
 			WorkDir:        workDir,
 			ProjectPath:    projectPath,
 			UserMessage:    req.Message,
 			Attachments:    req.Attachments,
+			IsSubConv:      conv.ConvType == "sub",
+			ParentConvID:   conv.ParentID,
+			AgentName:      conv.AgentName,
 		}
 		mgr.Start(sk, c.ChatRunner, runCfg)
+
+		// 子会话手动继续：启动后台协程等待完成，自动总结并驱动主会话继续
+		if conv.ConvType == "sub" && conv.ParentID > 0 {
+			go c.handleSubConvCompletion(ws, conv, agentID, sk)
+		}
 	}
 
 	// 原子地订阅并获取回放事件
@@ -232,13 +263,28 @@ func (c *WorkbenchCtrl) StopConversation(w http.ResponseWriter, r *http.Request)
 
 	mgr := c.RunnerManager
 	sk := service.SessionKey(ws.UUID, uint(convID))
+	sessionSvc := c.ChatService.ForWorkspace(ws.UUID)
 
-	if mgr == nil || !mgr.IsRunning(sk) {
+	if mgr == nil {
 		common.JSONError(w, http.StatusBadRequest, "会话未在运行")
 		return
 	}
 
-	sessionSvc := c.ChatService.ForWorkspace(ws.UUID)
+	// 子会话自身可能已结束，但父会话仍在运行，此时也允许停止
+	if !mgr.IsRunning(sk) {
+		conv, _ := sessionSvc.GetConversation(uint(convID))
+		if conv != nil && conv.ConvType == "sub" && conv.ParentID > 0 {
+			mainKey := service.SessionKey(ws.UUID, conv.ParentID)
+			if !mgr.IsRunning(mainKey) {
+				common.JSONError(w, http.StatusBadRequest, "会话未在运行")
+				return
+			}
+		} else {
+			common.JSONError(w, http.StatusBadRequest, "会话未在运行")
+			return
+		}
+	}
+
 	conv, err := sessionSvc.GetConversation(uint(convID))
 	if err != nil {
 		common.JSONError(w, http.StatusNotFound, "会话不存在")
@@ -246,7 +292,9 @@ func (c *WorkbenchCtrl) StopConversation(w http.ResponseWriter, r *http.Request)
 	}
 
 	var stoppedSubs []uint
+	var stoppedMainConvID uint
 	if conv.ConvType == "main" || conv.ParentID == 0 {
+		// 主会话视图：停止所有关联子会话
 		var subConvs []model.Conversation
 		sessionSvc.DB.Where("parent_id = ? AND status = 1", convID).Find(&subConvs)
 		for _, sub := range subConvs {
@@ -256,13 +304,117 @@ func (c *WorkbenchCtrl) StopConversation(w http.ResponseWriter, r *http.Request)
 				stoppedSubs = append(stoppedSubs, sub.ID)
 			}
 		}
+		mgr.Stop(sk)
+	} else {
+		// 子会话视图：通过 parent_id 找到关联的父会话和兄弟子会话一起停止
+		mainConvID := conv.ParentID
+		stoppedMainConvID = mainConvID
+
+		// 1. ForceFinish 所有同一父会话下 status=1 的子会话
+		var subConvs []model.Conversation
+		sessionSvc.DB.Where("parent_id = ? AND status = 1", mainConvID).Find(&subConvs)
+		for _, sub := range subConvs {
+			subKey := service.SessionKey(ws.UUID, sub.ID)
+			if mgr.IsRunning(subKey) {
+				mgr.ForceFinish(subKey)
+				stoppedSubs = append(stoppedSubs, sub.ID)
+			}
+		}
+
+		// 2. 确保当前子会话也被停止（可能不在上面的查询结果中）
+		if mgr.IsRunning(sk) {
+			mgr.ForceFinish(sk)
+		}
+
+		// 3. 停止父主会话
+		mainKey := service.SessionKey(ws.UUID, mainConvID)
+		if mgr.IsRunning(mainKey) {
+			mgr.Stop(mainKey)
+		}
 	}
 
-	mgr.Stop(sk)
-
-	slog.Info("会话已停止", "conv_id", convID, "stopped_subs", stoppedSubs)
+	slog.Info("会话已停止", "conv_id", convID, "stopped_subs", stoppedSubs, "stopped_main", stoppedMainConvID)
 	common.JSONSuccess(w, map[string]interface{}{
-		"stopped":           true,
-		"stopped_sub_convs": stoppedSubs,
+		"stopped":              true,
+		"stopped_sub_convs":    stoppedSubs,
+		"stopped_main_conv_id": stoppedMainConvID,
 	})
+}
+
+// handleSubConvCompletion 等待子会话 runner 完成后，更新父会话中的工具结果消息
+// 全部子会话完成时自动驱动主会话继续
+func (c *WorkbenchCtrl) handleSubConvCompletion(ws *model.Workspace, subConv *model.Conversation, agentID uint, subKey string) {
+	mgr := c.RunnerManager
+
+	// 等待子会话 runner 完成
+	mgr.WaitForCompletion(subKey)
+
+	sessionSvc := c.ChatService.ForWorkspace(ws.UUID)
+
+	// 生成总结并标记完成
+	subCfg := service.RunConfig{
+		ConversationID: subConv.ID,
+		AgentID:        agentID,
+		WorkspaceUUID:  ws.UUID,
+		IsSubConv:      true,
+	}
+	summary := c.ChatRunner.SummarizeConversation(subCfg, ws.UUID, subConv.ID)
+	if summary == "" {
+		summary = "子会话已完成（无总结内容）"
+	}
+	sessionSvc.FinishConversation(subConv.ID, summary)
+
+	// 更新父会话中的错误 tool result 为实际总结
+	if subConv.ToolCallID != "" {
+		newContent := fmt.Sprintf("[%s 的回复]\n%s", subConv.Title, summary)
+		sessionSvc.DB.Model(&model.ChatMessage{}).
+			Where("conversation_id = ? AND role = ? AND tool_call_id = ?",
+				subConv.ParentID, "tool", subConv.ToolCallID).
+			Update("content", newContent)
+	}
+
+	// 通知父会话订阅者
+	parentKey := service.SessionKey(ws.UUID, subConv.ParentID)
+	mgr.Publish(parentKey, service.StreamEvent{
+		Type: "sub_conv_done",
+		Data: map[string]interface{}{"conv_id": subConv.ID},
+	})
+
+	// 检查是否还有未完成的兄弟子会话（进行中或已取消待继续）
+	var pendingCount int64
+	sessionSvc.DB.Model(&model.Conversation{}).
+		Where("parent_id = ? AND status IN (1, 3)", subConv.ParentID).
+		Count(&pendingCount)
+	if pendingCount > 0 {
+		slog.Info("子会话完成，等待其他兄弟子会话",
+			"sub_conv_id", subConv.ID, "pending", pendingCount)
+		return
+	}
+
+	// 所有子会话都已完成 → 工具结果已全部更新，自动驱动主会话
+	parentConv, err := sessionSvc.GetConversation(subConv.ParentID)
+	if err != nil || parentConv.Status != 1 {
+		slog.Info("子会话全部完成但父会话不可继续", "parent_id", subConv.ParentID)
+		return
+	}
+	if mgr.IsRunning(parentKey) {
+		return
+	}
+
+	workDir := c.WorkspaceService.GetWorkDir(ws.UUID)
+	var projectPath string
+	if ws.ProjectID > 0 && ws.Project.Path != "" {
+		projectPath = ws.Project.Path
+	}
+	mainCfg := service.RunConfig{
+		ConversationID: subConv.ParentID,
+		AgentID:        parentConv.AgentID,
+		WorkspaceID:    ws.ID,
+		WorkspaceUUID:  ws.UUID,
+		WorkDir:        workDir,
+		ProjectPath:    projectPath,
+		UserMessage:    "",
+	}
+	mgr.Start(parentKey, c.ChatRunner, mainCfg)
+	slog.Info("所有子会话完成，自动继续主会话", "parent_id", subConv.ParentID)
 }

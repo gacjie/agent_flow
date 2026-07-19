@@ -328,3 +328,20 @@ func LoadingFailures(items []string) []string {
 	}
 	return out
 }
+
+func ResolveDevice(device string, width, height int) (int, int, error) {
+	device = strings.ToLower(strings.TrimSpace(device))
+	if device == "" {
+		return width, height, nil
+	}
+	preset, ok := DevicePresets[device]
+	if !ok {
+		names := make([]string, 0, len(DevicePresets))
+		for k := range DevicePresets {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		return 0, 0, fmt.Errorf("未知设备预设 %q（支持: %s）", device, strings.Join(names, "/"))
+	}
+	return preset[0], preset[1], nil
+}

@@ -40,8 +40,11 @@ func NewOpenAIResponsesClient(cfg ProviderConfig) *OpenAIResponsesClient {
 		streamIdleTimeout: streamIdle,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
+				ForceAttemptHTTP2:     true,
 				TLSHandshakeTimeout:   15 * time.Second,
 				ResponseHeaderTimeout: baseDur,
+				MaxIdleConnsPerHost:   2,
+				IdleConnTimeout:       120 * time.Second,
 			},
 		},
 	}

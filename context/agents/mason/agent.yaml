@@ -30,4 +30,6 @@ auto_load_tools:
   - diagnose_files
   - search_contexts
   - analysis_contexts
-doc_roles: "backend,database,security,api"
+doc_roles: "backend,database,api"
+skills:
+  - backend-security

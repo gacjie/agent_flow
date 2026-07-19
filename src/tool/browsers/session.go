@@ -1,6 +1,7 @@
 package browsers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -15,10 +16,12 @@ import (
 )
 
 const MaxEventLogs = 20
+const cookieFileName = "cookies.json"
 
 type Session struct {
 	Browser             *rod.Browser
 	Page                *rod.Page
+	UserDataDir         string
 	LastUsed            time.Time
 	ConsoleLogs         []string
 	NetworkEvents       []string
@@ -61,6 +64,7 @@ func (m *Manager) Cleanup() {
 		sess.Mu.Unlock()
 		if idle {
 			slog.Info("浏览器会话空闲超时，自动关闭", "key", key)
+			saveCookies(sess)
 			sess.Browser.MustClose()
 			delete(m.sessions, key)
 		}
@@ -114,6 +118,8 @@ func (m *Manager) GetOrCreate(key string, width, height int, workDir string) (*S
 		UserDataDir(userDataDir).
 		Set("disable-gpu").
 		Set("disable-dev-shm-usage").
+		Set("disable-features", "SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure").
+		Set("allow-insecure-localhost").
 		Env(append(os.Environ(), "HOME="+userDataDir)...)
 
 	u, err := l.Launch()
@@ -140,9 +146,10 @@ func (m *Manager) GetOrCreate(key string, width, height int, workDir string) (*S
 	}
 
 	sess := &Session{
-		Browser:  browser,
-		Page:     page,
-		LastUsed: time.Now(),
+		Browser:     browser,
+		Page:        page,
+		UserDataDir: userDataDir,
+		LastUsed:    time.Now(),
 	}
 
 	// 事件监听：console + network
@@ -199,6 +206,7 @@ func (m *Manager) GetOrCreate(key string, width, height int, workDir string) (*S
 		},
 	)()
 
+	restoreCookies(sess)
 	m.sessions[key] = sess
 	return sess, nil
 }
@@ -219,6 +227,7 @@ func (m *Manager) Close(key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if sess, ok := m.sessions[key]; ok {
+		saveCookies(sess)
 		sess.Browser.MustClose()
 		delete(m.sessions, key)
 	}
@@ -241,4 +250,69 @@ func CloneLogs(src []string) []string {
 	out := make([]string, len(src))
 	copy(out, src)
 	return out
+}
+
+func saveCookies(sess *Session) {
+	if sess.UserDataDir == "" || sess.Page == nil {
+		return
+	}
+	res, err := proto.NetworkGetAllCookies{}.Call(sess.Page)
+	if err != nil {
+		slog.Warn("保存 cookies 失败", "error", err)
+		return
+	}
+	if len(res.Cookies) == 0 {
+		return
+	}
+	data, err := json.Marshal(res.Cookies)
+	if err != nil {
+		slog.Warn("保存 cookies 序列化失败", "error", err)
+		return
+	}
+	path := filepath.Join(sess.UserDataDir, cookieFileName)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		slog.Warn("保存 cookies 写入失败", "error", err, "path", path)
+	}
+}
+
+func restoreCookies(sess *Session) {
+	if sess.UserDataDir == "" || sess.Page == nil {
+		return
+	}
+	path := filepath.Join(sess.UserDataDir, cookieFileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var cookies []*proto.NetworkCookie
+	if err := json.Unmarshal(data, &cookies); err != nil {
+		slog.Warn("恢复 cookies 解析失败", "error", err)
+		os.Remove(path)
+		return
+	}
+	if len(cookies) == 0 {
+		os.Remove(path)
+		return
+	}
+	var params []*proto.NetworkCookieParam
+	for _, c := range cookies {
+		p := &proto.NetworkCookieParam{
+			Name:     c.Name,
+			Value:    c.Value,
+			Domain:   c.Domain,
+			Path:     c.Path,
+			Secure:   c.Secure,
+			HTTPOnly: c.HTTPOnly,
+			SameSite: c.SameSite,
+		}
+		if c.Expires > 0 {
+			p.Expires = proto.TimeSinceEpoch(c.Expires)
+		}
+		params = append(params, p)
+	}
+	if err := (proto.NetworkSetCookies{Cookies: params}).Call(sess.Page); err != nil {
+		slog.Warn("恢复 cookies 失败", "error", err)
+	} else {
+		os.Remove(path)
+	}
 }

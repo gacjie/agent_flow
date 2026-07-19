@@ -47,15 +47,8 @@ func (l *Loader) LoadRole(contextRoot, agentName string) []ContextBlock {
 		})
 	}
 
-	// workflow.md — 角色工作流
-	if content := readFileIfExists(filepath.Join(agentDir, "workflow.md")); content != "" {
-		blocks = append(blocks, ContextBlock{
-			Level:   LevelRole,
-			Label:   "工作流程",
-			Content: content,
-			Source:  filepath.Join("agents", agentName, "workflow.md"),
-		})
-	}
+	// workflow.md 不再加载到 system prompt，由 WorkflowEngine 按步骤解析并注入
+	// （见 service/workflow_engine.go）
 
 	// skill.md — 角色技能描述
 	if content := readFileIfExists(filepath.Join(agentDir, "skill.md")); content != "" {

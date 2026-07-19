@@ -197,8 +197,19 @@ func ExecuteAction(sess *Session, a StructuredAction) (interface{}, error) {
 			return nil, err
 		}
 		evalResult = result.Value.Val()
+	case "resize":
+		w, h := a.Width, a.Height
+		if w <= 0 || h <= 0 {
+			return nil, errors.New("resize 需要有效的 width 和 height")
+		}
+		if err := page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
+			Width: w, Height: h, DeviceScaleFactor: 1,
+		}); err != nil {
+			return nil, fmt.Errorf("设置视口失败: %w", err)
+		}
+		time.Sleep(500 * time.Millisecond)
 	case "clear_cache":
-		if err := (proto.NetworkClearBrowserCache{}).Call(sess.Browser); err != nil {
+		if err := (proto.NetworkClearBrowserCache{}).Call(page); err != nil {
 			return nil, fmt.Errorf("清除浏览器缓存失败: %w", err)
 		}
 	default:
@@ -217,7 +228,7 @@ func ShouldIncludeStructured(a StructuredAction, signals StepSignals, after Stru
 	if plan.AlwaysIncludeStructured {
 		return true
 	}
-	if a.Action == "navigate" || a.Action == "click" {
+	if a.Action == "navigate" || a.Action == "click" || a.Action == "resize" {
 		return true
 	}
 	if signals.NavigationChanged {
@@ -299,6 +310,12 @@ func SummarizeStep(a StructuredAction, before, after StructuredState, d Delta, p
 	}
 	step := StructuredStepResult{Action: a.Action, Selector: a.Selector, ElapsedMS: ms, Signals: signals}
 	parts := []string{"步骤: " + a.Action}
+	if a.Action == "resize" {
+		parts = append(parts, fmt.Sprintf("视口: %dx%d", a.Width, a.Height))
+		if a.Device != "" {
+			parts = append(parts, "设备: "+a.Device)
+		}
+	}
 	if after.Title != "" {
 		parts = append(parts, "标题: "+after.Title)
 	}
@@ -356,14 +373,14 @@ func NormalizeWait(action string, wait int) int {
 		return wait
 	}
 	switch action {
-	case "navigate", "click", "type", "scroll":
+	case "navigate", "click", "type", "scroll", "resize":
 		return 2
 	default:
 		return 0
 	}
 }
 
-func BuildActions(p *Params) []StructuredAction {
+func BuildActions(p *Params) ([]StructuredAction, error) {
 	if len(p.Actions) > 0 {
 		steps := make([]StructuredAction, 0, len(p.Actions))
 		for _, item := range p.Actions {
@@ -372,12 +389,30 @@ func BuildActions(p *Params) []StructuredAction {
 			if wait <= 0 {
 				wait = p.Wait
 			}
-			steps = append(steps, StructuredAction{Action: action, URL: strings.TrimSpace(item.URL), Selector: strings.TrimSpace(item.Selector), Text: item.Text, Script: item.Script, Direction: strings.ToLower(strings.TrimSpace(item.Direction)), Amount: item.Amount, Wait: NormalizeWait(action, wait)})
+			w, h := item.Width, item.Height
+			device := strings.ToLower(strings.TrimSpace(item.Device))
+			if device != "" {
+				rw, rh, err := ResolveDevice(device, w, h)
+				if err != nil {
+					return nil, err
+				}
+				w, h = rw, rh
+			}
+			steps = append(steps, StructuredAction{Action: action, URL: strings.TrimSpace(item.URL), Selector: strings.TrimSpace(item.Selector), Text: item.Text, Script: item.Script, Direction: strings.ToLower(strings.TrimSpace(item.Direction)), Amount: item.Amount, Wait: NormalizeWait(action, wait), Width: w, Height: h, Device: device})
 		}
-		return steps
+		return steps, nil
 	}
 	action := strings.ToLower(strings.TrimSpace(p.Action))
-	return []StructuredAction{{Action: action, URL: strings.TrimSpace(p.URL), Selector: strings.TrimSpace(p.Selector), Text: p.Text, Script: p.Script, Direction: strings.ToLower(strings.TrimSpace(p.Direction)), Amount: p.Amount, Wait: NormalizeWait(action, p.Wait)}}
+	w, h := p.Width, p.Height
+	device := strings.ToLower(strings.TrimSpace(p.Device))
+	if device != "" {
+		rw, rh, err := ResolveDevice(device, w, h)
+		if err != nil {
+			return nil, err
+		}
+		w, h = rw, rh
+	}
+	return []StructuredAction{{Action: action, URL: strings.TrimSpace(p.URL), Selector: strings.TrimSpace(p.Selector), Text: p.Text, Script: p.Script, Direction: strings.ToLower(strings.TrimSpace(p.Direction)), Amount: p.Amount, Wait: NormalizeWait(action, p.Wait), Width: w, Height: h, Device: device}}, nil
 }
 
 func ClearSessionTelemetry(sess *Session) {
@@ -404,7 +439,14 @@ func CurrentDoc(sess *Session) DocState {
 func ExecuteStructured(sessionKey string, p *Params, workDir string) (string, bool) {
 	started := time.Now()
 	out := StructuredOutput{OK: true, StartedAt: started.Format(time.RFC3339), OutputExpands: PickStrings(p.OutputExpands, len(p.OutputExpands))}
-	actions := BuildActions(p)
+	actions, buildErr := BuildActions(p)
+	if buildErr != nil {
+		out.OK = false
+		out.FinishedAt = time.Now().Format(time.RFC3339)
+		out.Summary = "参数解析失败"
+		out.Error = buildErr.Error()
+		return MarshalResult(out)
+	}
 	if len(actions) == 0 || actions[0].Action == "" {
 		out.OK = false
 		out.FinishedAt = time.Now().Format(time.RFC3339)

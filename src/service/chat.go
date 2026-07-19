@@ -115,6 +115,11 @@ func (s *ChatService) CancelConversation(id uint) error {
 	return s.DB.Model(&model.Conversation{}).Where("id = ?", id).Update("status", 3).Error
 }
 
+// ReopenConversation 重新激活已取消的会话（用于子会话手动继续场景）
+func (s *ChatService) ReopenConversation(id uint) error {
+	return s.DB.Model(&model.Conversation{}).Where("id = ?", id).Update("status", 1).Error
+}
+
 // UpdateTokens 更新 token 用量（直接赋值，反映当前上下文实际占用）
 func (s *ChatService) UpdateTokens(id uint, tokens int) error {
 	return s.DB.Model(&model.Conversation{}).Where("id = ?", id).

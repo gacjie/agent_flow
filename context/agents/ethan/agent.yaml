@@ -26,6 +26,8 @@ auto_load_tools:
   - task_lists
   - analysis_files
   - diagnose_files
-doc_roles: "backend,frontend,database,security,api"
+doc_roles: "backend,frontend,database,api"
 skills:
   - api-design
+  - backend-security
+  - backend-performance

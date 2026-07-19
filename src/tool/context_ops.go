@@ -150,10 +150,7 @@ func (t *ReadContextTool) Parameters() json.RawMessage {
 
 func (t *ReadContextTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Path   string `json:"path"`
-		Offset int    `json:"offset"`
-		Limit  int    `json:"limit"`
-		Files  []struct {
+		Files []struct {
 			Path   string `json:"path"`
 			Offset int    `json:"offset"`
 			Limit  int    `json:"limit"`
@@ -162,44 +159,37 @@ func (t *ReadContextTool) Execute(ctx context.Context, args string) *Result {
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
-
-	if len(params.Files) > 0 {
-		n := len(params.Files)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, f := range params.Files {
-			wg.Add(1)
-			go func(idx int, path string, offset, limit int) {
-				defer wg.Done()
-				fullPath, err := resolveContextPath(ctx, path)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
-					return
-				}
-				content, err := files.ReadSingleFile(fullPath, offset, limit)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
-				} else {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, path, content)
-				}
-			}(i, f.Path, f.Offset, f.Limit)
+	if len(params.Files) == 0 {
+		return ErrorResult("files 参数不能为空（至少提供一项）")
+	}
+	for i, f := range params.Files {
+		if f.Path == "" {
+			return ErrorResult(fmt.Sprintf("files[%d].path 不能为空", i))
 		}
-		wg.Wait()
-		return SuccessResult(strings.Join(results, "\n\n"))
 	}
 
-	if params.Path == "" {
-		return ErrorResult("path 不能为空")
+	n := len(params.Files)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, f := range params.Files {
+		wg.Add(1)
+		go func(idx int, path string, offset, limit int) {
+			defer wg.Done()
+			fullPath, err := resolveContextPath(ctx, path)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+				return
+			}
+			content, err := files.ReadSingleFile(fullPath, offset, limit)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+			} else {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, path, content)
+			}
+		}(i, f.Path, f.Offset, f.Limit)
 	}
-	fullPath, err := resolveContextPath(ctx, params.Path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	content, err := files.ReadSingleFile(fullPath, params.Offset, params.Limit)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	return SuccessResult(content)
+	wg.Wait()
+	return SuccessResult(strings.Join(results, "\n\n"))
 }
 
 // ── WriteContextTool 创建/编辑上下文文档（支持批量）───────
@@ -243,92 +233,62 @@ func (t *WriteContextTool) Execute(ctx context.Context, args string) *Result {
 		Mode    string `json:"mode"`
 	}
 	var params struct {
-		Path    string        `json:"path"`
-		Content string        `json:"content"`
-		OldText string        `json:"old_text"`
-		Mode    string        `json:"mode"`
-		Files   []ctxFileItem `json:"files"`
+		Files []ctxFileItem `json:"files"`
 	}
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
+	if len(params.Files) == 0 {
+		return ErrorResult("files 参数不能为空（至少提供一项）")
+	}
+	for i, f := range params.Files {
+		if f.Path == "" {
+			return ErrorResult(fmt.Sprintf("files[%d].path 不能为空", i))
+		}
+	}
 
-	if len(params.Files) > 0 {
-		pathOrder := []string{}
-		ctxFileOps := map[string][]writeOp{}
-		for _, f := range params.Files {
-			if isReadOnlyPrefix(f.Path) {
-				return ErrorResult(fmt.Sprintf("uploads/ 为只读目录，不允许写入: %s", f.Path))
+	pathOrder := []string{}
+	ctxFileOps := map[string][]writeOp{}
+	for _, f := range params.Files {
+		if isReadOnlyPrefix(f.Path) {
+			return ErrorResult(fmt.Sprintf("uploads/ 为只读目录，不允许写入: %s", f.Path))
+		}
+		if _, exists := ctxFileOps[f.Path]; !exists {
+			pathOrder = append(pathOrder, f.Path)
+		}
+		ctxFileOps[f.Path] = append(ctxFileOps[f.Path], writeOp{Content: f.Content, OldText: f.OldText, Mode: f.Mode})
+	}
+
+	n := len(pathOrder)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, path := range pathOrder {
+		wg.Add(1)
+		go func(idx int, filePath string, ops []writeOp) {
+			defer wg.Done()
+			res := processContextFileOps(ctx, filePath, ops)
+			if res.IsError {
+				results[idx] = fmt.Sprintf("✗ %s — %s", filePath, res.Content)
+			} else {
+				results[idx] = fmt.Sprintf("✓ %s — %s", filePath, res.Content)
 			}
-			if _, exists := ctxFileOps[f.Path]; !exists {
-				pathOrder = append(pathOrder, f.Path)
-			}
-			ctxFileOps[f.Path] = append(ctxFileOps[f.Path], writeOp{Content: f.Content, OldText: f.OldText, Mode: f.Mode})
-		}
+		}(i, path, ctxFileOps[path])
+	}
+	wg.Wait()
 
-		n := len(pathOrder)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, path := range pathOrder {
-			wg.Add(1)
-			go func(idx int, filePath string, ops []writeOp) {
-				defer wg.Done()
-				res := processContextFileOps(ctx, filePath, ops)
-				if res.IsError {
-					results[idx] = fmt.Sprintf("✗ %s — %s", filePath, res.Content)
-				} else {
-					results[idx] = fmt.Sprintf("✓ %s — %s", filePath, res.Content)
-				}
-			}(i, path, ctxFileOps[path])
+	successCount := 0
+	for _, r := range results {
+		if strings.HasPrefix(r, "✓") {
+			successCount++
 		}
-		wg.Wait()
-
-		successCount := 0
-		for _, r := range results {
-			if strings.HasPrefix(r, "✓") {
-				successCount++
-			}
-		}
-		failCount := n - successCount
-		header := fmt.Sprintf("批量操作结果 (%d 个文件，%d 成功 / %d 失败)：", n, successCount, failCount)
-		output := header + "\n" + strings.Join(results, "\n")
-		if failCount == n {
-			return ErrorResult(output)
-		}
-		return SuccessResult(output)
 	}
-
-	if params.Path == "" {
-		return ErrorResult("path 不能为空")
+	failCount := n - successCount
+	header := fmt.Sprintf("批量操作结果 (%d 个文件，%d 成功 / %d 失败)：", n, successCount, failCount)
+	output := header + "\n" + strings.Join(results, "\n")
+	if failCount == n {
+		return ErrorResult(output)
 	}
-	if isReadOnlyPrefix(params.Path) {
-		return ErrorResult(fmt.Sprintf("uploads/ 为只读目录，不允许写入: %s", params.Path))
-	}
-	fullPath, err := resolveContextPath(ctx, params.Path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-
-	if params.OldText != "" {
-		edits := []files.EditItem{{OldText: params.OldText, NewText: params.Content}}
-		cnt, err := files.ApplyFileEdits(fullPath, edits)
-		if err != nil {
-			return ErrorResult(err.Error())
-		}
-		if cnt > 1 {
-			return SuccessResult(fmt.Sprintf("文件已编辑（%d 处）: %s", cnt, params.Path))
-		}
-		return SuccessResult("文件已编辑: " + params.Path)
-	}
-
-	if params.Mode == "append" {
-		return appendContextFile(fullPath, params.Path, params.Content)
-	}
-
-	if err := files.WriteSingleFile(fullPath, params.Content); err != nil {
-		return ErrorResult(err.Error())
-	}
-	return SuccessResult("文件已写入: " + params.Path)
+	return SuccessResult(output)
 }
 
 func appendContextFile(fullPath, relPath, content string) *Result {
@@ -473,7 +433,6 @@ func (t *DeleteContextTool) Parameters() json.RawMessage {
 
 func (t *DeleteContextTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Path  string `json:"path"`
 		Files []struct {
 			Path string `json:"path"`
 		} `json:"files"`
@@ -481,78 +440,62 @@ func (t *DeleteContextTool) Execute(ctx context.Context, args string) *Result {
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
-
-	if len(params.Files) > 0 {
-		n := len(params.Files)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, f := range params.Files {
-			wg.Add(1)
-			go func(idx int, path string) {
-				defer wg.Done()
-				if isReadOnlyPrefix(path) {
-					results[idx] = fmt.Sprintf("✗ %s — uploads/ 为只读目录，不允许删除", path)
-					return
-				}
-				fullPath, err := resolveContextPath(ctx, path)
-				if err != nil {
-					results[idx] = fmt.Sprintf("✗ %s — %s", path, err.Error())
-					return
-				}
-				info, sErr := os.Stat(fullPath)
-				if sErr != nil {
-					results[idx] = fmt.Sprintf("✗ %s — 文件不存在: %s", path, sErr.Error())
-					return
-				}
-				if info.IsDir() {
-					results[idx] = fmt.Sprintf("✗ %s — 不允许删除目录", path)
-					return
-				}
-				if rErr := os.Remove(fullPath); rErr != nil {
-					results[idx] = fmt.Sprintf("✗ %s — 删除失败: %s", path, rErr.Error())
-				} else {
-					results[idx] = fmt.Sprintf("✓ %s — 已删除", path)
-				}
-			}(i, f.Path)
+	if len(params.Files) == 0 {
+		return ErrorResult("files 参数不能为空（至少提供一项）")
+	}
+	for i, f := range params.Files {
+		if f.Path == "" {
+			return ErrorResult(fmt.Sprintf("files[%d].path 不能为空", i))
 		}
-		wg.Wait()
+	}
 
-		successCount := 0
-		for _, r := range results {
-			if strings.HasPrefix(r, "✓") {
-				successCount++
+	n := len(params.Files)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, f := range params.Files {
+		wg.Add(1)
+		go func(idx int, path string) {
+			defer wg.Done()
+			if isReadOnlyPrefix(path) {
+				results[idx] = fmt.Sprintf("✗ %s — uploads/ 为只读目录，不允许删除", path)
+				return
 			}
-		}
-		failCount := n - successCount
-		header := fmt.Sprintf("批量删除结果 (%d 项，%d 成功 / %d 失败)：", n, successCount, failCount)
-		output := header + "\n" + strings.Join(results, "\n")
-		if failCount == n {
-			return ErrorResult(output)
-		}
-		return SuccessResult(output)
+			fullPath, err := resolveContextPath(ctx, path)
+			if err != nil {
+				results[idx] = fmt.Sprintf("✗ %s — %s", path, err.Error())
+				return
+			}
+			info, sErr := os.Stat(fullPath)
+			if sErr != nil {
+				results[idx] = fmt.Sprintf("✗ %s — 文件不存在: %s", path, sErr.Error())
+				return
+			}
+			if info.IsDir() {
+				results[idx] = fmt.Sprintf("✗ %s — 不允许删除目录", path)
+				return
+			}
+			if rErr := os.Remove(fullPath); rErr != nil {
+				results[idx] = fmt.Sprintf("✗ %s — 删除失败: %s", path, rErr.Error())
+			} else {
+				results[idx] = fmt.Sprintf("✓ %s — 已删除", path)
+			}
+		}(i, f.Path)
 	}
+	wg.Wait()
 
-	if params.Path == "" {
-		return ErrorResult("path 不能为空")
+	successCount := 0
+	for _, r := range results {
+		if strings.HasPrefix(r, "✓") {
+			successCount++
+		}
 	}
-	if isReadOnlyPrefix(params.Path) {
-		return ErrorResult(fmt.Sprintf("uploads/ 为只读目录，不允许删除: %s", params.Path))
+	failCount := n - successCount
+	header := fmt.Sprintf("批量删除结果 (%d 项，%d 成功 / %d 失败)：", n, successCount, failCount)
+	output := header + "\n" + strings.Join(results, "\n")
+	if failCount == n {
+		return ErrorResult(output)
 	}
-	fullPath, err := resolveContextPath(ctx, params.Path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		return ErrorResult("文件不存在: " + err.Error())
-	}
-	if info.IsDir() {
-		return ErrorResult("不允许删除目录: " + params.Path)
-	}
-	if err := os.Remove(fullPath); err != nil {
-		return ErrorResult("删除失败: " + err.Error())
-	}
-	return SuccessResult("已删除: " + params.Path)
+	return SuccessResult(output)
 }
 
 // ── ContextListTool 列出文档 ───────────────────────
@@ -562,7 +505,7 @@ type ContextListTool struct{}
 func (t *ContextListTool) Name() string { return "context_lists" }
 
 func (t *ContextListTool) Description() string {
-	return "列出上下文系统中的文档。支持的 directory：skills（上下文技能，默认）、specs（工作区规格文档）、tasks（工作区任务文档）、uploads（上传附件）、docs（项目文档）。"
+	return "列出上下文系统中的文档。支持的 directory：skills（上下文技能）、specs（工作区规格文档）、tasks（工作区任务文档）、uploads（上传附件）、docs（项目文档）。不指定时列出全部目录。"
 }
 
 func (t *ContextListTool) Parameters() json.RawMessage {
@@ -572,7 +515,7 @@ func (t *ContextListTool) Parameters() json.RawMessage {
 			"directory": {
 				"type": "string",
 				"enum": ["skills", "specs", "tasks", "uploads", "docs"],
-				"description": "目录范围：skills（上下文技能，默认）、specs（工作区规格文档）、tasks（工作区任务文档）、uploads（上传附件）、docs（项目文档）"
+				"description": "目录范围：skills（上下文技能）、specs（工作区规格文档）、tasks（工作区任务文档）、uploads（上传附件）、docs（项目文档）。不指定时列出全部目录"
 			}
 		}
 	}`)
@@ -587,10 +530,14 @@ func (t *ContextListTool) Execute(ctx context.Context, args string) *Result {
 	}
 
 	if params.Directory == "" {
-		params.Directory = "skills"
+		return t.listAll(ctx)
 	}
 
-	dir, err := resolveListDir(ctx, params.Directory)
+	return t.listOne(ctx, params.Directory)
+}
+
+func (t *ContextListTool) listOne(ctx context.Context, directory string) *Result {
+	dir, err := resolveListDir(ctx, directory)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -598,7 +545,7 @@ func (t *ContextListTool) Execute(ctx context.Context, args string) *Result {
 	entries, readErr := os.ReadDir(dir)
 	if readErr != nil {
 		if os.IsNotExist(readErr) {
-			return SuccessResult(fmt.Sprintf("%s/  （目录不存在）", params.Directory))
+			return SuccessResult(fmt.Sprintf("%s/  （目录不存在）", directory))
 		}
 		return ErrorResult(fmt.Sprintf("读取目录失败: %s", readErr.Error()))
 	}
@@ -606,20 +553,64 @@ func (t *ContextListTool) Execute(ctx context.Context, args string) *Result {
 	var items []string
 	for _, e := range entries {
 		if e.IsDir() {
-			items = append(items, fmt.Sprintf("  %s/%s/", params.Directory, e.Name()))
+			items = append(items, fmt.Sprintf("  %s/%s/", directory, e.Name()))
 			continue
 		}
 		info, err := e.Info()
 		if err != nil {
 			continue
 		}
-		items = append(items, fmt.Sprintf("  %s/%s  (%s)", params.Directory, e.Name(), formatCtxSize(info.Size())))
+		items = append(items, fmt.Sprintf("  %s/%s  (%s)", directory, e.Name(), formatCtxSize(info.Size())))
 	}
 
 	if len(items) == 0 {
-		return SuccessResult(fmt.Sprintf("%s/  （空）", params.Directory))
+		return SuccessResult(fmt.Sprintf("%s/  （空）", directory))
 	}
-	return SuccessResult(fmt.Sprintf("%s/ (%d 项):\n%s", params.Directory, len(items), strings.Join(items, "\n")))
+	return SuccessResult(fmt.Sprintf("%s/ (%d 项):\n%s", directory, len(items), strings.Join(items, "\n")))
+}
+
+func (t *ContextListTool) listAll(ctx context.Context) *Result {
+	dirs := []string{"skills", "specs", "tasks", "uploads", "docs"}
+	var sections []string
+
+	for _, d := range dirs {
+		dir, err := resolveListDir(ctx, d)
+		if err != nil {
+			sections = append(sections, fmt.Sprintf("%s/  （不可用：%s）", d, err.Error()))
+			continue
+		}
+
+		entries, readErr := os.ReadDir(dir)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				sections = append(sections, fmt.Sprintf("%s/  （目录不存在）", d))
+			} else {
+				sections = append(sections, fmt.Sprintf("%s/  （读取失败：%s）", d, readErr.Error()))
+			}
+			continue
+		}
+
+		var items []string
+		for _, e := range entries {
+			if e.IsDir() {
+				items = append(items, fmt.Sprintf("  %s/%s/", d, e.Name()))
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			items = append(items, fmt.Sprintf("  %s/%s  (%s)", d, e.Name(), formatCtxSize(info.Size())))
+		}
+
+		if len(items) == 0 {
+			sections = append(sections, fmt.Sprintf("%s/  （空）", d))
+		} else {
+			sections = append(sections, fmt.Sprintf("%s/ (%d 项):\n%s", d, len(items), strings.Join(items, "\n")))
+		}
+	}
+
+	return SuccessResult(fmt.Sprintf("上下文目录总览 (%d 类):\n\n%s", len(dirs), strings.Join(sections, "\n\n")))
 }
 
 // ── SearchContextTool 搜索上下文内容 ─────────────────────
@@ -743,7 +734,6 @@ func (t *AnalysisContextTool) Parameters() json.RawMessage {
 
 func (t *AnalysisContextTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Path  string `json:"path"`
 		Files []struct {
 			Path string `json:"path"`
 		} `json:"files"`
@@ -751,42 +741,35 @@ func (t *AnalysisContextTool) Execute(ctx context.Context, args string) *Result 
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
-
-	if len(params.Files) > 0 {
-		n := len(params.Files)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, f := range params.Files {
-			wg.Add(1)
-			go func(idx int, path string) {
-				defer wg.Done()
-				fullPath, err := resolveContextPath(ctx, path)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
-					return
-				}
-				content, err := files.AnalyzeSingleFile(fullPath)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
-				} else {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, path, content)
-				}
-			}(i, f.Path)
+	if len(params.Files) == 0 {
+		return ErrorResult("files 参数不能为空（至少提供一项）")
+	}
+	for i, f := range params.Files {
+		if f.Path == "" {
+			return ErrorResult(fmt.Sprintf("files[%d].path 不能为空", i))
 		}
-		wg.Wait()
-		return SuccessResult(strings.Join(results, "\n\n"))
 	}
 
-	if params.Path == "" {
-		return ErrorResult("path 不能为空")
+	n := len(params.Files)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, f := range params.Files {
+		wg.Add(1)
+		go func(idx int, path string) {
+			defer wg.Done()
+			fullPath, err := resolveContextPath(ctx, path)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+				return
+			}
+			content, err := files.AnalyzeSingleFile(fullPath)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+			} else {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, path, content)
+			}
+		}(i, f.Path)
 	}
-	fullPath, err := resolveContextPath(ctx, params.Path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	content, err := files.AnalyzeSingleFile(fullPath)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	return SuccessResult(content)
+	wg.Wait()
+	return SuccessResult(strings.Join(results, "\n\n"))
 }

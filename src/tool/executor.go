@@ -37,7 +37,8 @@ func (e *Executor) Execute(ctx context.Context, calls []provider.ToolCall) []pro
 				return
 			}
 
-			result := t.Execute(ctx, tc.Arguments)
+			toolCtx := WithToolCallID(ctx, tc.ID)
+			result := t.Execute(toolCtx, tc.Arguments)
 			content := result.Content
 			if result.IsError {
 				content = "[错误] " + content

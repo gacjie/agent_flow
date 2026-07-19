@@ -560,7 +560,9 @@ var WB_CONFIG = {
     csrfToken: '{{.CSRFToken}}',
     agents: [{{range .Agents}}{ id: {{.ID}}, name: '{{.Name}}', title: '{{.Title}}', description: '{{.Description}}', modelId: '{{.ModelID}}' },{{end}}],
     models: [{{range .Models}}{ id: {{.ID}}, name: '{{.Name}}', modelId: '{{.ModelID}}', protocol: '{{.Protocol}}' },{{end}}],
-    hasProject: {{if .Workspace}}{{if .Workspace.Project.Path}}true{{else}}false{{end}}{{else}}false{{end}}
+    hasProject: {{if .Workspace}}{{if .Workspace.Project.Path}}true{{else}}false{{end}}{{else}}false{{end}},
+    convType: '{{if .ConvType}}{{.ConvType}}{{else}}main{{end}}',
+    convParentId: {{if .ConvParentID}}{{.ConvParentID}}{{else}}0{{end}}
 };
 </script>
 <script src="/static/js/marked.min.js"></script>

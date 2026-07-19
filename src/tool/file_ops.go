@@ -116,10 +116,7 @@ func (t *ReadFileTool) Parameters() json.RawMessage {
 
 func (t *ReadFileTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Path   string `json:"path"`
-		Offset int    `json:"offset"`
-		Limit  int    `json:"limit"`
-		Files  []struct {
+		Files []struct {
 			Path   string `json:"path"`
 			Offset int    `json:"offset"`
 			Limit  int    `json:"limit"`
@@ -128,75 +125,56 @@ func (t *ReadFileTool) Execute(ctx context.Context, args string) *Result {
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
+	if len(params.Files) == 0 {
+		return ErrorResult("files 参数不能为空（至少提供一项）")
+	}
+	for i, f := range params.Files {
+		if f.Path == "" {
+			return ErrorResult(fmt.Sprintf("files[%d].path 不能为空", i))
+		}
+	}
 
-	if len(params.Files) > 0 {
-		n := len(params.Files)
-		results := make([]string, n)
-		var allImages []ImageData
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		for i, f := range params.Files {
-			wg.Add(1)
-			go func(idx int, path string, offset, limit int) {
-				defer wg.Done()
-				fullPath, err := safePath(ctx, path)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
-					return
-				}
-				// 图片文件：读取为 base64 放入 Images
-				if mimeType, ok := isImageFile(fullPath); ok {
-					img, err := readImageFile(fullPath, path, mimeType)
-					if err != nil {
-						results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
-					} else {
-						mu.Lock()
-						allImages = append(allImages, img)
-						mu.Unlock()
-						info, _ := os.Stat(fullPath)
-						results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n[图片文件: %s, %d 字节]", idx+1, n, path, mimeType, info.Size())
-					}
-					return
-				}
-				content, err := files.ReadSingleFile(fullPath, offset, limit)
+	n := len(params.Files)
+	results := make([]string, n)
+	var allImages []ImageData
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for i, f := range params.Files {
+		wg.Add(1)
+		go func(idx int, path string, offset, limit int) {
+			defer wg.Done()
+			fullPath, err := safePath(ctx, path)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+				return
+			}
+			if mimeType, ok := isImageFile(fullPath); ok {
+				img, err := readImageFile(fullPath, path, mimeType)
 				if err != nil {
 					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
 				} else {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, path, content)
+					mu.Lock()
+					allImages = append(allImages, img)
+					mu.Unlock()
+					info, _ := os.Stat(fullPath)
+					results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n[图片文件: %s, %d 字节]", idx+1, n, path, mimeType, info.Size())
 				}
-			}(i, f.Path, f.Offset, f.Limit)
-		}
-		wg.Wait()
-		result := SuccessResult(strings.Join(results, "\n\n"))
-		if len(allImages) > 0 {
-			result.Images = allImages
-		}
-		return result
+				return
+			}
+			content, err := files.ReadSingleFile(fullPath, offset, limit)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+			} else {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, path, content)
+			}
+		}(i, f.Path, f.Offset, f.Limit)
 	}
-
-	if params.Path == "" {
-		return ErrorResult("path 不能为空")
+	wg.Wait()
+	result := SuccessResult(strings.Join(results, "\n\n"))
+	if len(allImages) > 0 {
+		result.Images = allImages
 	}
-	fullPath, err := safePath(ctx, params.Path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	// 图片文件：读取为 base64 放入 Images
-	if mimeType, ok := isImageFile(fullPath); ok {
-		img, err := readImageFile(fullPath, params.Path, mimeType)
-		if err != nil {
-			return ErrorResult(err.Error())
-		}
-		info, _ := os.Stat(fullPath)
-		result := SuccessResult(fmt.Sprintf("[图片文件: %s, %d 字节]", mimeType, info.Size()))
-		result.Images = []ImageData{img}
-		return result
-	}
-	content, err := files.ReadSingleFile(fullPath, params.Offset, params.Limit)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	return SuccessResult(content)
+	return result
 }
 
 // readImageFile 读取图片文件并返回 ImageData
@@ -250,10 +228,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args string) *Result {
 		OldText string `json:"old_text"`
 	}
 	var params struct {
-		Path    string     `json:"path"`
-		Content string     `json:"content"`
-		OldText string     `json:"old_text"`
-		Files   []fileItem `json:"files"`
+		Files []fileItem `json:"files"`
 	}
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		var raw map[string]json.RawMessage
@@ -271,71 +246,54 @@ func (t *WriteFileTool) Execute(ctx context.Context, args string) *Result {
 	}
 parsed:
 
-	if len(params.Files) > 0 {
-		pathOrder := []string{}
-		fileOps := map[string][]writeOp{}
-		for _, f := range params.Files {
-			if _, exists := fileOps[f.Path]; !exists {
-				pathOrder = append(pathOrder, f.Path)
+	if len(params.Files) == 0 {
+		return ErrorResult("files 参数不能为空（至少提供一项）")
+	}
+	for i, f := range params.Files {
+		if f.Path == "" {
+			return ErrorResult(fmt.Sprintf("files[%d].path 不能为空", i))
+		}
+	}
+
+	pathOrder := []string{}
+	fileOps := map[string][]writeOp{}
+	for _, f := range params.Files {
+		if _, exists := fileOps[f.Path]; !exists {
+			pathOrder = append(pathOrder, f.Path)
+		}
+		fileOps[f.Path] = append(fileOps[f.Path], writeOp{Content: f.Content, OldText: f.OldText})
+	}
+
+	n := len(pathOrder)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, path := range pathOrder {
+		wg.Add(1)
+		go func(idx int, filePath string, ops []writeOp) {
+			defer wg.Done()
+			res := processFileOps(ctx, filePath, ops)
+			if res.IsError {
+				results[idx] = fmt.Sprintf("✗ %s — %s", filePath, res.Content)
+			} else {
+				results[idx] = fmt.Sprintf("✓ %s — %s", filePath, res.Content)
 			}
-			fileOps[f.Path] = append(fileOps[f.Path], writeOp{Content: f.Content, OldText: f.OldText})
-		}
+		}(i, path, fileOps[path])
+	}
+	wg.Wait()
 
-		n := len(pathOrder)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, path := range pathOrder {
-			wg.Add(1)
-			go func(idx int, filePath string, ops []writeOp) {
-				defer wg.Done()
-				res := processFileOps(ctx, filePath, ops)
-				if res.IsError {
-					results[idx] = fmt.Sprintf("✗ %s — %s", filePath, res.Content)
-				} else {
-					results[idx] = fmt.Sprintf("✓ %s — %s", filePath, res.Content)
-				}
-			}(i, path, fileOps[path])
+	successCount := 0
+	for _, r := range results {
+		if strings.HasPrefix(r, "✓") {
+			successCount++
 		}
-		wg.Wait()
-
-		successCount := 0
-		for _, r := range results {
-			if strings.HasPrefix(r, "✓") {
-				successCount++
-			}
-		}
-		failCount := n - successCount
-		header := fmt.Sprintf("批量操作结果 (%d 个文件，%d 成功 / %d 失败)：", n, successCount, failCount)
-		output := header + "\n" + strings.Join(results, "\n")
-		if failCount == n {
-			return ErrorResult(output)
-		}
-		return SuccessResult(output)
 	}
-
-	if params.Path == "" {
-		return ErrorResult("path 不能为空")
+	failCount := n - successCount
+	header := fmt.Sprintf("批量操作结果 (%d 个文件，%d 成功 / %d 失败)：", n, successCount, failCount)
+	output := header + "\n" + strings.Join(results, "\n")
+	if failCount == n {
+		return ErrorResult(output)
 	}
-	fullPath, err := safePath(ctx, params.Path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	if params.OldText != "" {
-		edits := []files.EditItem{{OldText: params.OldText, NewText: params.Content}}
-		cnt, err := files.ApplyFileEdits(fullPath, edits)
-		if err != nil {
-			return ErrorResult(err.Error())
-		}
-		msg := "文件已编辑: " + params.Path
-		if cnt > 1 {
-			msg = fmt.Sprintf("文件已编辑（%d 处）: %s", cnt, params.Path)
-		}
-		return successWithDiag(ctx, fullPath, msg)
-	}
-	if err := files.WriteSingleFile(fullPath, params.Content); err != nil {
-		return ErrorResult(err.Error())
-	}
-	return successWithDiag(ctx, fullPath, "文件已写入: "+params.Path)
+	return SuccessResult(output)
 }
 
 // successWithDiag 返回成功结果并追加诊断信息（如有）
@@ -457,7 +415,6 @@ func (t *DeleteFileTool) Parameters() json.RawMessage {
 
 func (t *DeleteFileTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Path  string `json:"path"`
 		Files []struct {
 			Path string `json:"path"`
 		} `json:"files"`
@@ -465,55 +422,49 @@ func (t *DeleteFileTool) Execute(ctx context.Context, args string) *Result {
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
-
-	if len(params.Files) > 0 {
-		n := len(params.Files)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, f := range params.Files {
-			wg.Add(1)
-			go func(idx int, path string) {
-				defer wg.Done()
-				fullPath, err := safePath(ctx, path)
-				if err != nil {
-					results[idx] = fmt.Sprintf("✗ %s — %s", path, err.Error())
-					return
-				}
-				if err := files.DeleteSingleFile(fullPath); err != nil {
-					results[idx] = fmt.Sprintf("✗ %s — %s", path, err.Error())
-				} else {
-					results[idx] = fmt.Sprintf("✓ %s — 已删除", path)
-				}
-			}(i, f.Path)
+	if len(params.Files) == 0 {
+		return ErrorResult("files 参数不能为空（至少提供一项）")
+	}
+	for i, f := range params.Files {
+		if f.Path == "" {
+			return ErrorResult(fmt.Sprintf("files[%d].path 不能为空", i))
 		}
-		wg.Wait()
+	}
 
-		successCount := 0
-		for _, r := range results {
-			if strings.HasPrefix(r, "✓") {
-				successCount++
+	n := len(params.Files)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, f := range params.Files {
+		wg.Add(1)
+		go func(idx int, path string) {
+			defer wg.Done()
+			fullPath, err := safePath(ctx, path)
+			if err != nil {
+				results[idx] = fmt.Sprintf("✗ %s — %s", path, err.Error())
+				return
 			}
-		}
-		failCount := n - successCount
-		header := fmt.Sprintf("批量操作结果 (%d 项，%d 成功 / %d 失败)：", n, successCount, failCount)
-		output := header + "\n" + strings.Join(results, "\n")
-		if failCount == n {
-			return ErrorResult(output)
-		}
-		return SuccessResult(output)
+			if err := files.DeleteSingleFile(fullPath); err != nil {
+				results[idx] = fmt.Sprintf("✗ %s — %s", path, err.Error())
+			} else {
+				results[idx] = fmt.Sprintf("✓ %s — 已删除", path)
+			}
+		}(i, f.Path)
 	}
+	wg.Wait()
 
-	if params.Path == "" {
-		return ErrorResult("path 不能为空")
+	successCount := 0
+	for _, r := range results {
+		if strings.HasPrefix(r, "✓") {
+			successCount++
+		}
 	}
-	fullPath, err := safePath(ctx, params.Path)
-	if err != nil {
-		return ErrorResult(err.Error())
+	failCount := n - successCount
+	header := fmt.Sprintf("批量操作结果 (%d 项，%d 成功 / %d 失败)：", n, successCount, failCount)
+	output := header + "\n" + strings.Join(results, "\n")
+	if failCount == n {
+		return ErrorResult(output)
 	}
-	if err := files.DeleteSingleFile(fullPath); err != nil {
-		return ErrorResult(err.Error())
-	}
-	return SuccessResult("已删除: " + params.Path)
+	return SuccessResult(output)
 }
 
 // ── ListFilesTool 列出目录内容（支持批量）────────────────
@@ -549,10 +500,7 @@ func (t *ListFilesTool) Parameters() json.RawMessage {
 
 func (t *ListFilesTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Path      string `json:"path"`
-		Pattern   string `json:"pattern"`
-		Recursive bool   `json:"recursive"`
-		Dirs      []struct {
+		Dirs []struct {
 			Path      string `json:"path"`
 			Pattern   string `json:"pattern"`
 			Recursive bool   `json:"recursive"`
@@ -561,49 +509,36 @@ func (t *ListFilesTool) Execute(ctx context.Context, args string) *Result {
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
-
-	if len(params.Dirs) > 0 {
-		n := len(params.Dirs)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, d := range params.Dirs {
-			wg.Add(1)
-			go func(idx int, path, pattern string, recursive bool) {
-				defer wg.Done()
-				if path == "" {
-					path = "."
-				}
-				fullPath, err := safePath(ctx, path)
-				label := path
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, label, err.Error())
-					return
-				}
-				content, err := files.ListSingleDir(fullPath, pattern, recursive)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, label, err.Error())
-				} else {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, label, content)
-				}
-			}(i, d.Path, d.Pattern, d.Recursive)
-		}
-		wg.Wait()
-		return SuccessResult(strings.Join(results, "\n\n"))
+	if len(params.Dirs) == 0 {
+		return ErrorResult("dirs 参数不能为空（至少提供一项）")
 	}
 
-	path := params.Path
-	if path == "" {
-		path = "."
+	n := len(params.Dirs)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, d := range params.Dirs {
+		wg.Add(1)
+		go func(idx int, path, pattern string, recursive bool) {
+			defer wg.Done()
+			if path == "" {
+				path = "."
+			}
+			fullPath, err := safePath(ctx, path)
+			label := path
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, label, err.Error())
+				return
+			}
+			content, err := files.ListSingleDir(fullPath, pattern, recursive)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, label, err.Error())
+			} else {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, label, content)
+			}
+		}(i, d.Path, d.Pattern, d.Recursive)
 	}
-	fullPath, err := safePath(ctx, path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	content, err := files.ListSingleDir(fullPath, params.Pattern, params.Recursive)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	return SuccessResult(content)
+	wg.Wait()
+	return SuccessResult(strings.Join(results, "\n\n"))
 }
 
 // ── SearchFilesTool 搜索文件内容（支持批量）──────────────
@@ -640,10 +575,7 @@ func (t *SearchFilesTool) Parameters() json.RawMessage {
 
 func (t *SearchFilesTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Path        string `json:"path"`
-		Pattern     string `json:"pattern"`
-		FilePattern string `json:"file_pattern"`
-		Queries     []struct {
+		Queries []struct {
 			Path        string `json:"path"`
 			Pattern     string `json:"pattern"`
 			FilePattern string `json:"file_pattern"`
@@ -652,55 +584,40 @@ func (t *SearchFilesTool) Execute(ctx context.Context, args string) *Result {
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
-
-	if len(params.Queries) > 0 {
-		n := len(params.Queries)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, q := range params.Queries {
-			wg.Add(1)
-			go func(idx int, path, pattern, filePattern string) {
-				defer wg.Done()
-				if pattern == "" {
-					results[idx] = fmt.Sprintf("=== [%d/%d] 搜索: %q（错误）===\n搜索关键词不能为空", idx+1, n, pattern)
-					return
-				}
-				if path == "" {
-					path = "."
-				}
-				fullPath, err := safePath(ctx, path)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] 搜索: %q（错误）===\n%s", idx+1, n, pattern, err.Error())
-					return
-				}
-				content, err := files.SearchSinglePattern(fullPath, pattern, filePattern)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] 搜索: %q（错误）===\n%s", idx+1, n, pattern, err.Error())
-				} else {
-					results[idx] = fmt.Sprintf("=== [%d/%d] 搜索: %q ===\n%s", idx+1, n, pattern, content)
-				}
-			}(i, q.Path, q.Pattern, q.FilePattern)
+	if len(params.Queries) == 0 {
+		return ErrorResult("queries 参数不能为空（至少提供一项）")
+	}
+	for i, q := range params.Queries {
+		if q.Pattern == "" {
+			return ErrorResult(fmt.Sprintf("queries[%d].pattern 不能为空", i))
 		}
-		wg.Wait()
-		return SuccessResult(strings.Join(results, "\n\n"))
 	}
 
-	if params.Pattern == "" {
-		return ErrorResult("搜索关键词不能为空")
+	n := len(params.Queries)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, q := range params.Queries {
+		wg.Add(1)
+		go func(idx int, path, pattern, filePattern string) {
+			defer wg.Done()
+			if path == "" {
+				path = "."
+			}
+			fullPath, err := safePath(ctx, path)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] 搜索: %q（错误）===\n%s", idx+1, n, pattern, err.Error())
+				return
+			}
+			content, err := files.SearchSinglePattern(fullPath, pattern, filePattern)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] 搜索: %q（错误）===\n%s", idx+1, n, pattern, err.Error())
+			} else {
+				results[idx] = fmt.Sprintf("=== [%d/%d] 搜索: %q ===\n%s", idx+1, n, pattern, content)
+			}
+		}(i, q.Path, q.Pattern, q.FilePattern)
 	}
-	path := params.Path
-	if path == "" {
-		path = "."
-	}
-	fullPath, err := safePath(ctx, path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	content, err := files.SearchSinglePattern(fullPath, params.Pattern, params.FilePattern)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	return SuccessResult(content)
+	wg.Wait()
+	return SuccessResult(strings.Join(results, "\n\n"))
 }
 
 // ── AnalysisFileTool 文件结构分析（支持批量）─────────────
@@ -735,7 +652,6 @@ func (t *AnalysisFileTool) Parameters() json.RawMessage {
 
 func (t *AnalysisFileTool) Execute(ctx context.Context, args string) *Result {
 	var params struct {
-		Path  string `json:"path"`
 		Files []struct {
 			Path string `json:"path"`
 		} `json:"files"`
@@ -743,42 +659,35 @@ func (t *AnalysisFileTool) Execute(ctx context.Context, args string) *Result {
 	if err := json.Unmarshal([]byte(args), &params); err != nil {
 		return ErrorResult("参数解析失败: " + err.Error())
 	}
-
-	if len(params.Files) > 0 {
-		n := len(params.Files)
-		results := make([]string, n)
-		var wg sync.WaitGroup
-		for i, f := range params.Files {
-			wg.Add(1)
-			go func(idx int, path string) {
-				defer wg.Done()
-				fullPath, err := safePath(ctx, path)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
-					return
-				}
-				content, err := files.AnalyzeSingleFile(fullPath)
-				if err != nil {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
-				} else {
-					results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, path, content)
-				}
-			}(i, f.Path)
+	if len(params.Files) == 0 {
+		return ErrorResult("files 参数不能为空（至少提供一项）")
+	}
+	for i, f := range params.Files {
+		if f.Path == "" {
+			return ErrorResult(fmt.Sprintf("files[%d].path 不能为空", i))
 		}
-		wg.Wait()
-		return SuccessResult(strings.Join(results, "\n\n"))
 	}
 
-	if params.Path == "" {
-		return ErrorResult("path 不能为空")
+	n := len(params.Files)
+	results := make([]string, n)
+	var wg sync.WaitGroup
+	for i, f := range params.Files {
+		wg.Add(1)
+		go func(idx int, path string) {
+			defer wg.Done()
+			fullPath, err := safePath(ctx, path)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+				return
+			}
+			content, err := files.AnalyzeSingleFile(fullPath)
+			if err != nil {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s（错误）===\n%s", idx+1, n, path, err.Error())
+			} else {
+				results[idx] = fmt.Sprintf("=== [%d/%d] %s ===\n%s", idx+1, n, path, content)
+			}
+		}(i, f.Path)
 	}
-	fullPath, err := safePath(ctx, params.Path)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	content, err := files.AnalyzeSingleFile(fullPath)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	return SuccessResult(content)
+	wg.Wait()
+	return SuccessResult(strings.Join(results, "\n\n"))
 }

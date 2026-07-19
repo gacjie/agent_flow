@@ -26,6 +26,8 @@ auto_load_tools:
   - read_contexts
   - write_files
   - task_lists
-doc_roles: "backend,security"
+doc_roles: "backend"
 skills:
   - tech-spec
+  - backend-security
+  - project-types

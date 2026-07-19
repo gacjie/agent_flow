@@ -30,3 +30,5 @@ auto_load_tools:
 doc_roles: "frontend"
 skills:
   - css-methodology
+  - frontend-security
+  - frontend-performance

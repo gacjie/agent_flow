@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 )
@@ -138,16 +139,25 @@ func IsPermanentError(err error) bool {
 	return false
 }
 
-// IsTransientServerError 判断是否为短暂服务端错误 (502, 503)，需短延时后重试
+// IsTransientServerError 判断是否为短暂服务端错误 (502, 503, 504)，需短延时后重试
 func IsTransientServerError(err error) bool {
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == 502 || apiErr.StatusCode == 503
+		return apiErr.StatusCode == 502 || apiErr.StatusCode == 503 || apiErr.StatusCode == 504
 	}
 	return false
 }
 
-// TransientRetryDelay 短暂服务端错误 (502/503) 重试前的等待时间
+// IsHTTP2StreamError 判断是否为 HTTP/2 流级别错误（服务端主动重置流）
+func IsHTTP2StreamError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "stream error") || strings.Contains(msg, "INTERNAL_ERROR") || strings.Contains(msg, "RST_STREAM")
+}
+
+// TransientRetryDelay 短暂服务端错误重试前的等待时间
 const TransientRetryDelay = 5 * time.Second
 
 // TimeoutAdjustable 支持动态调整流式超时的客户端接口
